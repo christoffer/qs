@@ -1,0 +1,4 @@
+bin/
+.vscode/
+.ccls-cache/
+test/*.test
