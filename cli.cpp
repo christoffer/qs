@@ -11,6 +11,8 @@
 #define is_alpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
 #define is_identchr(c) (is_alpha(c) || (c >= '0' && c <= '9') || c == '-' || c == '_')
 
+#define MAX_POS_ARGS 10
+
 static void
 print_usage(char *exec_name) {
     printf("Usage:\n");
@@ -43,14 +45,6 @@ print_help() {
     printf("\n");
 }
 
-static char *
-get_arg(char ** args, int arg_index, int num_args) {
-    if (arg_index < num_args) {
-        return args[arg_index];
-    }
-    return NULL;
-}
-
 static bool
 is_identifier(const char * val) {
     u32 i = cstrlen(val);
@@ -73,90 +67,92 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
         return ParseResult_Invalid;
     }
 
-    // Grab the current working directory so that we can resolve relative paths
-    // to config files, if needed.
-    char cwd[PATH_MAX] = {0};
-    if (!realpath(".", cwd))
-    {
-        fprintf(stderr, "Error: Could not resolve the current directory.\n");
-        return ParseResult_Error;
-    }
-
+    u8 num_pos_args = 0;
     int arg_index = 1; // Skip binary name
-    char * current_arg = get_arg(args, arg_index, num_args);
-    while (current_arg)
+    char * current_arg = args[arg_index];
+    while (arg_index < num_args)
     {
         // TODO(christoffer) Parse -d commands as arguments
         // Parse --arguments
         if (string_starts_with(current_arg, "--")) {
-            current_arg += 2; // skip leading '--'
-            if (string_eq(current_arg, "dry-run")) {
+            /*** Parse option flags for qs itself ***/
+
+            if (string_eq(current_arg, "--dry-run")) {
                 options->dry_run = true;
-            } else if (string_eq(current_arg, "verbose")) {
+            } else if (string_eq(current_arg, "--verbose")) {
                 options->verbose = true;
-            } else if (string_eq(current_arg, "config")) {
-                current_arg = get_arg(args, ++arg_index, num_args);
-                if (current_arg == NULL) {
+            } else if (string_eq(current_arg, "--config")) {
+                // Make sure we have a path value
+                if (++arg_index < num_args) {
+                    current_arg = args[arg_index];
+                } else {
                     fprintf(stdout, "Argument --config should be followed by a file path.\n");
                     return ParseResult_Invalid;
                 }
-                char resolved_path[PATH_MAX] = {0};
-                if (realpath(current_arg, resolved_path)) {
-                    StringList * node = (StringList *) calloc(1, sizeof(StringList));
-                    node->string = string_new(resolved_path);
-                    node->next = options->config_files;
-                    options->config_files = node;
+
+                if (char * resolved_path = realpath(current_arg, 0)) {
+                    options->config_files = string_push_dup_front(options->config_files, resolved_path);
+                    free(resolved_path);
                 } else {
-                    fprintf(stdout, "Warning: could not read the config file '%s'. Ignoring.\n", current_arg);
+                    fprintf(stdout, "Warning: could not read the config file '%s'. Ignoring.", current_arg);
                 }
-            } else if (string_eq(current_arg, "help")) {
+            } else if (string_eq(current_arg, "--help")) {
                 print_help();
                 return ParseResult_Stop;
-            } else if (string_eq(current_arg, "version")) {
+            } else if (string_eq(current_arg, "--version")) {
                 fprintf(stdout, "%s\n", QUICK_SCRIPT_VERSION);
                 return ParseResult_Stop;
-            } else if (string_eq(current_arg, "template")) {
-                current_arg = get_arg(args, ++arg_index, num_args);
-                if (current_arg == NULL) {
+            } else if (string_eq(current_arg, "--template")) {
+                // Make sure we have a template value
+                if (++arg_index < num_args) {
+                    current_arg = args[arg_index];
+                } else {
                     fprintf(stdout, "--template should be followed by a template string.\n");
                     return ParseResult_Invalid;
                 }
 
-                if (options->template_string == NULL) {
-                    options->template_string = string_new(current_arg);
-                } else {
-                    // Override the former template string
+                // Set or overwrite the template string
+                if (options->template_string) {
                     options->template_string = string_copy(options->template_string, current_arg);
+                } else {
+                    options->template_string = string_new(current_arg);
                 }
             } else {
-                // If not a special argument type, try and interpret as a variable name value pair
-                char * varname = current_arg;
+                /*** Parse as named varible ***/
+
+                char * varname = (current_arg + 2); // skip '--'
                 if (!is_identifier(varname)) {
                     fprintf(stdout, "Variable name '%s' is not a valid name. Variables must start with a letter, and consist only of letters, numbers and '-' and '_' (e.g. --some-variable_1, --NAME1).\n", varname);
                     return ParseResult_Invalid;
                 }
 
                 // Advance one argument to get the value
-                char * varval = get_arg(args, ++arg_index, num_args);
-                if (varval == NULL) {
+                if (++arg_index < num_args) {
+                    options->variables = template_set(options->variables, varname, args[arg_index]);
+                } else {
                     fprintf(stdout, "Missing value for variable '%s'\n", varname);
                     return ParseResult_Invalid;
                 }
-                options->variables = template_set(options->variables, varname, varval);
             }
-        } else if (is_identifier(current_arg)) {
-            if (options->action_name != NULL) {
-                fprintf(stdout, "Only one action name can ge given. Got %s and %s.\n", options->action_name, current_arg);
+        } else if (options->action_name) {
+            // We've got an action name, and have already checked for any other known argument.
+            // Treat this as a positional argument.
+            if (num_pos_args >= MAX_POS_ARGS) {
+                fprintf(stdout, "At most %d positional arguments can be given. Wrap arguments containing spaces in double quotes (\").\n", MAX_POS_ARGS);
                 return ParseResult_Invalid;
             }
-            // No action assigned yet, make the argument the action name
-            options->action_name = string_new(current_arg);
+            char varname[2] = {(char)('0' + num_pos_args++), 0};
+            options->variables = template_set(options->variables, varname, args[arg_index]);
         } else {
-            printf("Unknown argument: %s\n", current_arg);
-            return ParseResult_Invalid;
+            // Until we have a valid action name, we expect anything else to be the action name.
+            // If it's not a valid identifier, treat it as an error.
+            if (!is_identifier(current_arg)) {
+                fprintf(stdout, "'%s' is not a valid action name. Action names must start with a letter, followed by letters, numbers, a a dash (-) or an underscore (_)\n", current_arg);
+                return ParseResult_Invalid;
+            }
+            options->action_name = string_new(current_arg);
         }
-        // Advance to the next argument
-        current_arg = get_arg(args, ++arg_index, num_args);
+        current_arg = args[++arg_index];
     }
 
     if (options->action_name && options->template_string) {

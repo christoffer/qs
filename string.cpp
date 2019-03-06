@@ -164,6 +164,14 @@ string_copy(String string, const char * content) {
     return result;
 }
 
+StringList *
+string_push_dup_front(StringList * list, const char * content) {
+    StringList * node = (StringList *) calloc(1, sizeof(StringList));
+    node->string = string_new(content);
+    node->next = list;
+    return node;
+}
+
 bool
 string_eq(const char * a, const char * b) {
     // Break immidiately if we didn't get strings, or if the first char doesn't match

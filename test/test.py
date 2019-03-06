@@ -341,6 +341,19 @@ with test_env({'.qs.cfg': 'cmd =  # error, no comment allowed here'}) as env:
         stderr_regex=r"Error in (.*)\.qs\.cfg: Value cannot start with '#'"
     )
 
+with test_env({'.qs.cfg': 'cmd=echo "${0} and ${1}"'}) as env:
+    run_test(env, 'positional arguments',
+        ['cmd', 'foo', 'bar'],
+        stdout='foo and bar',
+    )
+
+with test_env({'.qs.cfg': 'cmd=echo "${0} and ${1}"'}) as env:
+    run_test(env, 'max pos args',
+        ['cmd', 'var1', 'var2', 'var3', 'var4', 'var5', 'var6', 'var7', 'var8', 'var9', 'var10', 'var11'],
+        exit_code=2,
+        stdout_regex='At most 10 positional arguments can be given',
+    )
+
 with test_env({'.qs.cfg': 'cmd ='}) as env:
     run_test(env, 'no value after action',
         ['cmd', '--dry-run'],
