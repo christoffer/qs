@@ -136,28 +136,35 @@ main(int argc, char **argv)
                 }
             }
 
-            // Merge the user defined variables into the config file provided variables
-            VarList * render_vars = 0;
-            VarList * varptr = config_defined_variables;
-            while (varptr) {
-                render_vars = template_set(render_vars, varptr->name, varptr->value);
-                varptr = varptr->next;
-            }
-            varptr = options.variables;
-            while (varptr) {
-                render_vars = template_set(render_vars, varptr->name, varptr->value);
-                varptr = varptr->next;
-            }
-
-            // Set the config path for the template render function to use when setting the
-            // command QS_RUN_DIR varibable
-            if (config_path) dirname(config_path);
-            command = template_render(render_vars, resolved_template);
-
-            if (command) {
-                exec_with_options(options, command, config_path);
+            if (options.print_action_help) {
+                String usage = template_get_usage(resolved_template, options.action_name);
+                if (usage) {
+                    fprintf(stdout, "%s", usage);
+                }
             } else {
-                error = ErrorType_User;
+                // Merge the user defined variables into the config file provided variables
+                VarList * render_vars = 0;
+                VarList * varptr = config_defined_variables;
+                while (varptr) {
+                    render_vars = template_set(render_vars, varptr->name, varptr->value);
+                    varptr = varptr->next;
+                }
+                varptr = options.variables;
+                while (varptr) {
+                    render_vars = template_set(render_vars, varptr->name, varptr->value);
+                    varptr = varptr->next;
+                }
+
+                // Set the config path for the template render function to use when setting the
+                // command QS_RUN_DIR varibable
+                if (config_path) dirname(config_path);
+                command = template_render(render_vars, resolved_template);
+
+                if (command) {
+                    exec_with_options(options, command, config_path);
+                } else {
+                    error = ErrorType_User;
+                }
             }
         } else if (resolve_template_res == ResolveTemplateRes_Missing) {
             fprintf(stdout, "Could not find action with name: %s\n", action_name);

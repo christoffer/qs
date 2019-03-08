@@ -97,8 +97,14 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
                     fprintf(stdout, "Warning: could not read the config file '%s'. Ignoring.", current_arg);
                 }
             } else if (string_eq(current_arg, "--help")) {
-                print_help();
-                return ParseResult_Stop;
+                if (options->action_name) {
+                    // --help came after the action name. Set the flag for displaying the auto-generated
+                    // help string for the command (done when parsing the template).
+                    options->print_action_help = true;
+                } else {
+                    print_help();
+                    return ParseResult_Stop;
+                }
             } else if (string_eq(current_arg, "--version")) {
                 fprintf(stdout, "%s\n", QUICK_SCRIPT_VERSION);
                 return ParseResult_Stop;

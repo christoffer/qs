@@ -354,6 +354,21 @@ with test_env({'.qs.cfg': 'cmd=echo "${0} and ${1}"'}) as env:
         stdout_regex='At most 10 positional arguments can be given',
     )
 
+with test_env({'.qs.cfg': 'cmd=unset ${0} ${1}'}) as env:
+    run_test(env, 'unused positional argument',
+        ['cmd', 'foo'],
+        exit_code=2,
+        stdout_regex='Require at least 2 positional arguments, only got 1',
+    )
+
+with test_env({'.qs.cfg': 'cmd=name ${name}, lastname: ${lname} and ${0}'}) as env:
+    run_test(env, 'arg help',
+        ['cmd', '--help'],
+        exit_code=0,
+        stdout='Usage: cmd $0 [--name <value>] [--lname <value>]',
+    )
+
+
 with test_env({'.qs.cfg': 'cmd ='}) as env:
     run_test(env, 'no value after action',
         ['cmd', '--dry-run'],

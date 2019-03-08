@@ -237,7 +237,7 @@ _process_conditional(
                 *result_out = string_append(*result_out, value);
             }
         } else if (token->type == TT_If) {
-            if (!_process_conditional(tokens, vars, template_string, skip_block, result_out)) {
+            if (!_process_conditional(&token, vars, template_string, skip_block, result_out)) {
                 error = true;
                 break;
             }
@@ -315,6 +315,54 @@ template_get(VarList * node, const char * name) {
         node = node->next;
     }
     return 0;
+}
+
+String
+template_get_usage(String template_string, const char * action_name) {
+    LinkedToken * tokens = tokenize_template(template_string);
+    if (!tokens) {
+        return 0;
+    }
+
+    u8 num_pos_args = 0;
+    String pos_args = string_new();
+    String named_args = string_new();
+
+    LinkedToken * tok = tokens;
+    while (tok) {
+        if ((tok->type == TT_If) || (tok->type == TT_Var)) {
+            if (string_len(tok->value) == 1 && (is_digit(*tok->value))) {
+                pos_args = string_append(pos_args, " $");
+                pos_args = string_append(pos_args, (char)('0' + (num_pos_args++)));
+            } else {
+                named_args = string_append(named_args, " [--");
+                named_args = string_append(named_args, tok->value);
+                named_args = string_append(named_args, " <value>]");
+            }
+        }
+        LinkedToken * dead = tok;
+        tok = tok->next;
+        string_free(dead->value);
+        free(dead);
+    }
+
+    String result = string_new("Usage: ");
+    result = string_append(result, action_name);
+
+    if (string_len(pos_args) > 0) {
+        result = string_append(result, pos_args);
+    }
+
+    if (string_len(named_args) > 0) {
+        result = string_append(result, named_args);
+    }
+
+    result = string_append(result, '\n');
+
+    string_free(pos_args);
+    string_free(named_args);
+
+    return result;
 }
 
 String

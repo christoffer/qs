@@ -5,8 +5,8 @@
 #pragma clang diagnostic ignored "-Wunused-macros"
 
 #define is_alpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-#define is_numeric(c) (c >= '0' && c <= '9')
-#define is_identifier_char(c) (is_alpha(c) || is_numeric(c) || c == '-' || c == '_')
+#define is_digit(c) (c >= '0' && c <= '9')
+#define is_identifier_char(c) (is_alpha(c) || is_digit(c) || c == '-' || c == '_')
 
 // NOTE(christoffer) Cast to void * to avoid the alignment warning from clang.
 // It seems like the x86 architecture doesn't have an aligment requirement on int (vs char)

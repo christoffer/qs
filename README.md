@@ -48,6 +48,8 @@ Conditionals can be nested.
 Template variables are given as double-dash arguments to qs (`--variable-name variable-value`). Default values
 for template variables can be provided in the configuration files using `variable-name := <default value>`.
 
+You can use `${0}`, `${1}`, etc for anonymous variables (0 is the first one, 1 is the second one, etc).
+
 ## Examples
 
 ```
@@ -57,6 +59,9 @@ google-search = xdg-open https://www.google.com/${query?}?q=${query}${end}
 # Creates a backup
 source-dir := /home/christoffer/documents
 backup=rsync ${source-dir} /Users/christoffer/backups/`date +%m-%d-%Y`.tar
+
+# Tar the src directory into a named tarball
+tar = tar -cf ${0} ./src
 ```
 
 ## Files

@@ -35,6 +35,12 @@ struct CommandLineOptions {
     /* Debug mode flag. Will print verbose debugging information. */
     bool verbose = false;
 
+    /**
+     * Flag that indicates that the user wants to print the generated help string for the
+     * provided action name
+     */
+    bool print_action_help = false;
+
     /* Variables */
     VarList * variables;
 };
