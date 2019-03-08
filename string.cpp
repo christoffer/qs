@@ -173,6 +173,27 @@ string_push_dup_front(StringList * list, const char * content) {
 }
 
 bool
+string_list_contains(StringList * list, const char * value) {
+    while(list) {
+        if (string_eq(list->string, value)) {
+            return true;
+        }
+        list = list->next;
+    }
+    return false;
+}
+
+void
+string_list_free(StringList * list) {
+    while(list) {
+        StringList * dead = list;
+        list = list->next;
+        string_free(dead->string);
+        free(dead);
+    }
+}
+
+bool
 string_eq(const char * a, const char * b) {
     // Break immidiately if we didn't get strings, or if the first char doesn't match
     if ((!a || !b) || (*a != *b)) {

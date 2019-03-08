@@ -37,6 +37,8 @@ String string_copy(String string, const char * content, u32 count);
 String string_copy(String string, const char * content);
 
 StringList * string_push_dup_front(StringList * list, const char *);
+bool string_list_contains(StringList * list, const char *);
+void string_list_free(StringList * list);
 
 bool string_eq(const char * a, const char * b);
 bool string_starts_with(const char * string, const char * substring);

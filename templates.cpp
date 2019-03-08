@@ -324,36 +324,52 @@ template_get_usage(String template_string, const char * action_name) {
         return 0;
     }
 
-    u8 num_pos_args = 0;
     String pos_args = string_new();
+    u8 seen_pos[10] = {0};
+    bool has_pos_args = false;
+
     String named_args = string_new();
+    StringList * seen_names = 0;
+    bool has_named_vars = false;
 
     LinkedToken * tok = tokens;
     while (tok) {
         if ((tok->type == TT_If) || (tok->type == TT_Var)) {
             if (string_len(tok->value) == 1 && (is_digit(*tok->value))) {
-                pos_args = string_append(pos_args, " $");
-                pos_args = string_append(pos_args, (char)('0' + (num_pos_args++)));
+                // Collect all of the seen positional arguments and loop over them in
+                // position order afterward. They can appear in any order in the template,
+                // but the order is (obviously) fixed on the command line.
+                seen_pos[*tok->value - '0'] = 1;
+                has_pos_args = true;
             } else {
-                named_args = string_append(named_args, " [--");
-                named_args = string_append(named_args, tok->value);
-                named_args = string_append(named_args, " <value>]");
+                if (!string_list_contains(seen_names, tok->value)) {
+                    named_args = string_append(named_args, " [--");
+                    named_args = string_append(named_args, tok->value);
+                    named_args = string_append(named_args, " <value>]");
+                    seen_names = string_push_dup_front(seen_names, tok->value);
+                    has_named_vars = true;
+                }
             }
         }
-        LinkedToken * dead = tok;
         tok = tok->next;
-        string_free(dead->value);
-        free(dead);
     }
+    string_list_free(seen_names);
+    linked_token_free(tokens);
 
     String result = string_new("Usage: ");
     result = string_append(result, action_name);
 
-    if (string_len(pos_args) > 0) {
+    if (has_pos_args) {
+        for (u8 i = 0; i < 10; i++) {
+            if (seen_pos[i]) {
+                pos_args = string_append(pos_args, " $");
+                pos_args = string_append(pos_args, (char)('0' + i));
+            }
+        }
         result = string_append(result, pos_args);
     }
 
-    if (string_len(named_args) > 0) {
+    if (has_named_vars) {
         result = string_append(result, named_args);
     }
 
