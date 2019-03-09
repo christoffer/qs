@@ -2,8 +2,6 @@
 
 #include <stdint.h>
 
-#define QUICK_SCRIPT_VERSION "1.0.0"
-
 typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;

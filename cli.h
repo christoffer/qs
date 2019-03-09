@@ -7,41 +7,52 @@
 enum ParseResult
 {
     // Parsed OK, proceed with execution
-    ParseResult_Procceed,
-    // Parsed OK, stop execution
-    ParseResult_Stop,
+    ParseResult_Ok,
     // User gave invalid arguments (reason printed during parsing)
     ParseResult_Invalid,
     // An error happened (error printed during parsing)
     ParseResult_Error,
 };
 
+/** The resulting configuration flags from parsing the CLI arguments given by the user. */
 struct CommandLineOptions {
-    /* The action to run (cannot be used together with template_string) */
+    /** The passed action name */
     String action_name = 0;
 
-    /* The template string to to use (cannot be used together with action_name) */
+    /** The passed template string */
     String template_string = 0;
 
-    /* A list of config files given at the command line. Multiple config files can be given
-     * by specifying --config multiple times. The order matters, the first config file
-     * to be check is the last one given. */
+    /**
+     * A list of config files given at the command line.
+     *
+     * Multiple config files can be given by specifying --config more than once.
+     * The order is significant; the first String in this list is the last one
+     * given by the user.
+     */
     StringList * config_files = 0;
 
-    /* Setting this flag will print the command that would have run to stdout instead of
-     * running it. */
+    /** Flag for preventing actually running the rendered template, just print it. */
     bool dry_run = false;
 
-    /* Debug mode flag. Will print verbose debugging information. */
+    /** Flag for printing verbose information during execution. */
     bool verbose = false;
 
-    /**
-     * Flag that indicates that the user wants to print the generated help string for the
-     * provided action name
-     */
+    /** Flag for printing the version. */
+    bool print_version = false;
+
+    /** Flag indicating that the user wishes to print the help string and exit. */
+    bool print_help = false;
+
+    /** Flag for printing help for the given action_name */
     bool print_action_help = false;
 
-    /* Variables */
+    /** Flag for listing all available actions */
+    bool print_available_actions = false;
+
+    /** Flag for when no any arguments were passed. */
+    bool no_arguments_given = false;
+
+    /** List of passed variables */
     VarList * variables;
 };
 

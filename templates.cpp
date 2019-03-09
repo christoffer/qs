@@ -295,6 +295,23 @@ template_set(VarList * head, const char * varname, const char * varvalue) {
     return head ? head : node;
 }
 
+VarList *
+template_merge(VarList * base, VarList * extended) {
+    VarList * result = 0;
+    VarList * varptr = base;
+    while (varptr) {
+        result = template_set(result, varptr->name, varptr->value);
+        varptr = varptr->next;
+    }
+    varptr = extended;
+    while (varptr) {
+        result = template_set(result, varptr->name, varptr->value);
+        varptr = varptr->next;
+    }
+
+    return result;
+}
+
 void
 template_free(VarList * node) {
     while (node) {
@@ -324,11 +341,10 @@ template_get_usage(String template_string, const char * action_name) {
         return 0;
     }
 
-    String pos_args = string_new();
     u8 seen_pos[10] = {0};
     bool has_pos_args = false;
 
-    String named_args = string_new();
+    String named_arg_desc = string_new();
     StringList * seen_names = 0;
     bool has_named_vars = false;
 
@@ -343,9 +359,9 @@ template_get_usage(String template_string, const char * action_name) {
                 has_pos_args = true;
             } else {
                 if (!string_list_contains(seen_names, tok->value)) {
-                    named_args = string_append(named_args, " [--");
-                    named_args = string_append(named_args, tok->value);
-                    named_args = string_append(named_args, " <value>]");
+                    named_arg_desc = string_append(named_arg_desc, " [--");
+                    named_arg_desc = string_append(named_arg_desc, tok->value);
+                    named_arg_desc = string_append(named_arg_desc, " <value>]");
                     seen_names = string_push_dup_front(seen_names, tok->value);
                     has_named_vars = true;
                 }
@@ -360,24 +376,23 @@ template_get_usage(String template_string, const char * action_name) {
     result = string_append(result, action_name);
 
     if (has_pos_args) {
+        String pos_arg_desc = string_new();
         for (u8 i = 0; i < 10; i++) {
             if (seen_pos[i]) {
-                pos_args = string_append(pos_args, " $");
-                pos_args = string_append(pos_args, (char)('0' + i));
+                pos_arg_desc = string_append(pos_arg_desc, " $");
+                pos_arg_desc = string_append(pos_arg_desc, (char)('0' + i));
             }
         }
-        result = string_append(result, pos_args);
+        result = string_append(result, pos_arg_desc);
+        string_free(pos_arg_desc);
     }
 
     if (has_named_vars) {
-        result = string_append(result, named_args);
+        result = string_append(result, named_arg_desc);
+        string_free(named_arg_desc);
     }
 
     result = string_append(result, '\n');
-
-    string_free(pos_args);
-    string_free(named_args);
-
     return result;
 }
 

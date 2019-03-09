@@ -9,6 +9,24 @@
 #include "string.h"
 #include "files.h"
 
+struct ActionTemplatePair {
+    String action_name = 0;
+    String template_string = 0;
+    ActionTemplatePair * next = 0;
+};
+
+static void
+_free_pairs(ActionTemplatePair * head) {
+    ActionTemplatePair * pair = head;
+    while (pair) {
+        string_free(pair->action_name);
+        string_free(pair->template_string);
+        ActionTemplatePair * dead = pair;
+        pair = pair->next;
+        free(dead);
+    }
+}
+
 static String
 find_source_root_dir(const char * start_path)
 {
@@ -20,33 +38,27 @@ find_source_root_dir(const char * start_path)
 
     bool found_source_root = false;
     String candidate = string_new();
-    while (!found_source_root)
-    {
+    while (!found_source_root) {
         candidate = string_copy(candidate, curpath);
         candidate = string_append(candidate, wanted_entry);
-        if (is_readable_dir(candidate))
-        {
+        if (is_readable_dir(candidate)) {
             found_source_root = true;
             break;
         }
 
-        if (curpath_len == 0)
-        {
+        if (curpath_len == 0) {
             break;
         }
 
         // move curpath up one level and check again
-        while(curpath_len--)
-        {
-            if (curpath[curpath_len] == '/')
-            {
+        while(curpath_len--) {
+            if (curpath[curpath_len] == '/') {
                 curpath[curpath_len] = '\0';
                 break;
             }
         }
 
-        if (curpath_len == 0)
-        {
+        if (curpath_len == 0) {
             break;
         }
     }
@@ -82,20 +94,14 @@ push_back_dup(StringList ** head, StringList * end, const char * content) {
 }
 
 StringList *
-resolve_and_append_default_config_files(StringList * config_files)
+resolve_default_config_files()
 {
     /**
      * NOTE(christoffer) The order in which we resolve these is significant. The resulting list will
      * processed from start to end, and the first action match is the one that's picked.
-     *
-     * It's assumed here that whatever paths are already in the list are higher priority than any
-     * of the config files resolved here, so we want to start appending to the end of the existing
-     * list.
      */
-
-    StringList * head = config_files;
+    StringList * head = 0;
     StringList * end = head;
-    while(end && end->next) end = end->next;
 
     /* Resolve cwd config */
     {
@@ -204,143 +210,227 @@ read_until_newline(u32 start, String content, String * value)
     return offset;
 }
 
-static ResolveTemplateRes
-resolve_template(const char * action_name, const char * filepath, String filecontent, String * resolved_template, VarList ** config_vars)
-{
-    // valid lines are:
-    // - NEWLINE
-    // - [WS] VARIABLE [WS] = [WS] VARIABLE VALUE
-    // - [WS] ACTION [WS] = [WS] TEMPLATE NEWLINE
-    // - [WS] COMMENT NEWLINE
+static ActionTemplatePair *
+remove_duplicate_actions(ActionTemplatePair * pairs, const char * filepath) {
+    ActionTemplatePair * head = pairs;
+    ActionTemplatePair * node = head;
+    ActionTemplatePair * prev = 0;
+    StringList * seen_actions = 0;
+    while (node) {
+        if (string_list_contains(seen_actions, node->action_name)) {
+            fprintf(stdout, "Warning: duplicate action name: %s (in %s)\n", node->action_name, filepath);
+
+            // prev should always have been set, can't detect dupes withouth checking
+            // at least two
+            assert(prev);
+
+            // Take the current 'node' out of the list and kill it
+            prev->next = node->next;
+            ActionTemplatePair * dead = node;
+            node = node->next;
+            string_free(dead->action_name);
+            string_free(dead->template_string);
+            free(dead);
+        } else {
+            seen_actions = string_push_dup_front(seen_actions, node->action_name);
+            prev = node;
+            node = node->next;
+        }
+    }
+    string_list_free(seen_actions);
+    return head;
+}
+
+static bool
+parse_config(char * filepath, ActionTemplatePair ** result_pairs, VarList ** result_vars) {
+    String filecontent;
+    if (!(filecontent = read_entire_file(filepath))) {
+        fprintf(stderr, "Error: failed to read config file: %s, aborting.\n", filepath);
+        string_free(filecontent);
+        return false;
+    }
+    u32 content_len = string_len(filecontent);
+
+    // The head, and the tail of the pair list
+    ActionTemplatePair * head = 0;
+    ActionTemplatePair * end = 0;
+    // The list of variables declared in the config file
+    VarList * vars = 0;
+    // Error flag set if the config file is invalid
+    bool error = false;
+
+    // Temporary storage variable for various values
+    String value = string_new();
+    // The parsed variable name to read a value for
+    String pending_var_name = string_new();
+    // The parse action name to read a template for
+    String pending_action_name = string_new();
+
+    // Offset into filecontent buffer we're currently reading
     u32 offset = 0;
+    // Speculative offset after attempting to parse a certain sequence of bytes
+    // (e.g. an identifier). We keep this separate to be able to compare them
+    // in order to detect if the sequence was read or not.
     u32 new_offset = 0;
 
-    String value = string_new();
-    String pending_var_name = 0;
-    bool action_matched_this_line = true;
-    bool did_dupe_warning = false;
-
-    ResolveTemplateRes result = ResolveTemplateRes_Missing;
-
-    /**
-     * NOTE(christoffer) We could be efficient here and return the first match. But we
-     * chose to parse the entire config file in order to give consistent errors when it's used.
-     */
-    u32 content_len = string_len(filecontent);
+    // Parse the config linewise
     while (offset < content_len)
     {
-        offset = skip_whitespace(offset, filecontent);
-        if ((new_offset = read_identifier(offset, filecontent, &value)) > offset)
-        {
-            offset = new_offset;
-            offset = skip_whitespace(offset, filecontent);
+        string_clear(pending_var_name);
+        string_clear(pending_action_name);
 
+        // Chew up any leading whitespace of the line
+        offset = skip_whitespace(offset, filecontent);
+
+        // Inspect the first non-whitespace content of the line
+        if (filecontent[offset] == '#') {
+            // Rest of the line is a comment
+            offset = read_until_newline(offset, filecontent, 0);
+        } else if (filecontent[offset] == '\n') {
+            // Empty-, or whitespace only line
+            offset++;
+        } else if ((new_offset = read_identifier(offset, filecontent, &value)) > offset) {
             // Found and parsed an identifier. We expect it to be followed by either
             // - a ':=' (if it's a variable definition)
             // - a '=' (if it's an action definition)
+            offset = new_offset;
+            offset = skip_whitespace(offset, filecontent);
 
             if (
-                    (offset + 2 < content_len)
-                    && filecontent[offset] == ':'
-                    && filecontent[offset + 1] == '=') {
-                // Variable definition
+                (offset + 2 < content_len)
+                && filecontent[offset] == ':'
+                && filecontent[offset + 1] == '='
+            ) {
+                // Variable (:=) declaration
                 offset += 2; // eat :=
-                pending_var_name = string_new(value);
+                pending_var_name = string_copy(pending_var_name, value);
             } else if (filecontent[offset] == '=') {
-                // Action definition
+                // Action (=) declaration
                 offset += 1; // eat =
-                action_matched_this_line = string_eq(action_name, value);
-                if (action_matched_this_line && (result == ResolveTemplateRes_Found) && !did_dupe_warning)
-                {
-                    fprintf(stdout, "Warning: duplicate action definition: %s (first one is used)\n", action_name);
-                    action_matched_this_line = false;
-                    did_dupe_warning = true;
-                }
-
-                if (action_matched_this_line && result != ResolveTemplateRes_Error) {
-                    result = ResolveTemplateRes_Found;
-                }
+                pending_action_name = string_copy(pending_action_name, value);
             } else {
                 // Error
                 fprintf(stderr, "Error in %s: Expected '=' or ':='\n", filepath);
-                result = ResolveTemplateRes_Error;
-                break;
+                error = true;
+                offset = read_until_newline(offset, filecontent, 0);
+                continue;
             }
 
-            // Eat whitespace after the (:)= and then parse the rest of the line as the value
+            // Eat whitespace after the =/:= and then parse the rest of the line as the value
             offset = skip_whitespace(offset, filecontent);
-            if (filecontent[offset] == '#')
-            {
+
+            // Special case. We don't allow the value to start with a comment because it's
+            // a bit ambiguous: "action = # is this a value or comment?"
+            if (filecontent[offset] == '#') {
                 fprintf(stderr, "Error in %s: Value cannot start with '#'\n", filepath);
-                result = ResolveTemplateRes_Error;
-                break;
+                error = true;
+                offset = read_until_newline(offset, filecontent, 0);
+                continue;
             }
+
             if ((new_offset = read_until_newline(offset, filecontent, &value)) > offset)
             {
-                if (pending_var_name) {
+                // Got value, decide what the assign it to based on which pending variable
+                // that was set.
+                if (string_len(pending_var_name)) {
                     // Parsed a variable name at the start of the line, set the value
-                    *config_vars = template_set(*config_vars, pending_var_name, value);
-                } else if (action_matched_this_line) {
-                    // Found a template for the right action, set the return value but continue
-                    // to parse the file.
-                    *resolved_template = string_copy(*resolved_template, value);
+                    vars = template_set(vars, pending_var_name, value);
+                } else if (string_len(pending_action_name)) {
+                    ActionTemplatePair * node = (ActionTemplatePair *) calloc(1, sizeof(ActionTemplatePair));
+                    assert(node);
+                    node->action_name = string_new(pending_action_name);
+                    node->template_string = string_new(value);
+                    head = head ? head : node;
+                    if (end) end->next = node;
+                    end = node;
+                } else {
+                    // Should always have gotten a var, action, or an error (that continues)
+                    assert(false);
                 }
+
                 offset = new_offset;
             } else {
                 // Error -- didn't get more content
                 fprintf(stderr, "Error in %s: No value after '='\n", filepath);
-                result = ResolveTemplateRes_Error;
-                break;
+                error = true;
+                offset = read_until_newline(offset, filecontent, 0);
+                continue;
             }
+
+            // There shouldn't be a case where we didn't deplete the line or content
             assert((filecontent[offset] == '\n') || (filecontent[offset] == '\0'));
-        }
-        else if (filecontent[offset] == '#')
-        {
-            offset++; // eat '#'
-            offset = read_until_newline(offset, filecontent, 0);
-        }
-        else if (filecontent[offset] == '\n')
-        {
-            offset++;
-        }
-        else
-        {
+        } else {
             fprintf(stderr, "Error: Unexpected character: '%c'\n", filecontent[offset]);
-            result = ResolveTemplateRes_Error;
-            break;
+            error = true;
+            offset = read_until_newline(offset, filecontent, 0);
+            continue;
         }
 
-        if (pending_var_name) {
-            string_free(pending_var_name);
-            pending_var_name = 0;
-        }
     }
 
+    // Free temporary data used during parsing
+    string_free(filecontent);
     string_free(value);
-    return result;
+    string_free(pending_action_name);
+    string_free(pending_var_name);
+
+    if (error) {
+        _free_pairs(head);
+        template_free(vars);
+        return false;
+    } else {
+        head = remove_duplicate_actions(head, filepath);
+        *result_pairs = head;
+        *result_vars = vars;
+        return true;
+    }
 }
 
-struct ActionTemplatePair {
-    String action_name;
-    String template_string;
-};
+bool
+config_get_action_names(char * config_file_path, StringList ** action_names) {
+    StringList * found_action_names = 0;
+    ActionTemplatePair * pairs = 0;
+    VarList * vars = 0;
 
-struct ActionTemplatePairs {
-    ActionTemplatePair * pairs;
-    u32 count;
-    u32 alloc_count;
-};
-
-ResolveTemplateRes
-resolve_template_for_action(char * config_file_path, char * action_name, String * resolved_template, VarList ** config_vars) {
-    String filecontent;
-
-    if (!(filecontent = read_entire_file(config_file_path))) {
-        fprintf(stderr, "Error: failed to read config file: %s, aborting.\n", config_file_path);
-        return ResolveTemplateRes_Error;
+    if (parse_config(config_file_path, &pairs, &vars)) {
+        ActionTemplatePair * pair = pairs;
+        while (pair) {
+            printf("Found: %s\n", pair->action_name);
+            found_action_names = string_push_dup_front(found_action_names, pair->action_name);
+            pair = pair->next;
+        }
+        _free_pairs(pairs);
+        *action_names = found_action_names;
+        return true;
     }
 
-    ResolveTemplateRes result = resolve_template(action_name, config_file_path, filecontent, resolved_template, config_vars);
-    string_free(filecontent);
+    return false;
+}
+
+ResolvedTemplateResult
+resolve_template_for_action(char * config_file_path, char * action_name) {
+    ActionTemplatePair * pairs = 0;
+    VarList * vars = 0;
+
+    ResolvedTemplateResult result = {};
+
+    if (parse_config(config_file_path, &pairs, &vars)) {
+        ActionTemplatePair * pair = pairs;
+        bool found = false;
+        while (pair) {
+            if (string_eq(pair->action_name, action_name)) {
+                result.template_string = string_new(pair->template_string);
+                result.vars = template_merge(0, vars);
+                found = true;
+                break;
+            }
+            pair = pair->next;
+        }
+        _free_pairs(pairs);
+        template_free(vars);
+    } else {
+        result.parse_error = true;
+    }
+
     return result;
 }

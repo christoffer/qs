@@ -23,20 +23,28 @@ struct Token {
     u32 end = 0;
 };
 
-enum ResolveTemplateRes
-{
-    ResolveTemplateRes_Found,
-    ResolveTemplateRes_Missing,
-    ResolveTemplateRes_Error,
+struct ResolvedTemplateResult {
+    String template_string = 0;
+    VarList * vars = 0;
+    bool parse_error = false;
 };
 
-/* Loop through a list of default configuration file locations, and add each existing one to
+/**
+ * Loop through a list of default configuration file locations, and add each existing one to
  * the privided string list. Only adds existing files that can be read.
  *
  * The paths are searched in order of priority. This means that the configration file to search
  * first is added fist to the list. It's assumed that the list already contains configuration files
- * with higher priority than any one added by this function. */
-StringList * resolve_and_append_default_config_files(StringList * config_files);
+ * with higher priority than any one added by this function.
+ */
+StringList * resolve_default_config_files();
+
+/**
+ * Parses the config file and writes all action names to 'action_names'.
+ * Returns true if the config file was successfully parsed, false otherwise (no result
+ * will be written in this case).
+ */
+bool config_get_action_names(char * config_file_path, StringList ** action_names);
 
 /**
  * Resolves a template string for given action by parsing a list of config
@@ -46,4 +54,4 @@ StringList * resolve_and_append_default_config_files(StringList * config_files);
  * Returns a ResolveTemplateRes enum value which indicates the resolution (found, not found or error).
  * The resolved template string is written to 'resolved_template' only if the return value is found.
  */
-ResolveTemplateRes resolve_template_for_action(char * config_file_path, char * action_name, String * resolved_template, VarList ** config_vars);
+ResolvedTemplateResult resolve_template_for_action(char * config_file_path, char * action_name);

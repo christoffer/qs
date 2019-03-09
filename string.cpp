@@ -77,8 +77,10 @@ string_clear(String string) {
 
 void
 string_free(String string) {
-    char * bufptr = ((char *) string) - HEADER_SIZE;
-    free(bufptr);
+    if (string) {
+        char * bufptr = ((char *) string) - HEADER_SIZE;
+        free(bufptr);
+    }
 }
 
 String

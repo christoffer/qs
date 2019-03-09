@@ -265,12 +265,34 @@ with test_env({}) as env_root:
          )
     )
 
+with test_env({
+    '.qs.cfg': '''
+        foo = echo "foo"
+        bar = echo "bar"
+    ''',
+    'config/qs/default.cfg': '''
+        qux = echo "qux"
+        foo = echo "foo again"
+    ''',
+    'custom.cfg': '''
+        bar = echo "bar again"
+        boop = echo "boop"
+    ''',
+}) as env:
+    xdg_config_home = os.path.join(env, 'config')
+    run_test(env, 'show avialable commands with --list',
+        ['--list', '--config', 'custom.cfg'],
+        stdout_regex='',
+        env={'XDG_CONFIG_HOME': xdg_config_home},
+    )
+
 # Config files
 with test_env({"custom.cfg": 'predefined=echo "Predefined in custom cfg works!"'}) as env:
     run_test(env, '--config custom',
         ['predefined', '--config', 'custom.cfg'],
         stdout='Predefined in custom cfg works!'
     )
+# TODO - duplicate action names
 
 with test_env({'a.cfg': 'cmd=echo "a"', 'b.cfg': 'cmd=echo "b"'}) as env:
     run_test(env, '--config prio',

@@ -14,6 +14,16 @@ struct VarList {
  */
 VarList * template_set(VarList * vars, const char * name, const char * value);
 
+/**
+ * Merges the 'extended' list of variables into the 'base' list of variables and
+ * returns a pointer to a new VarList that contains the merged set of the two.
+ * If a name exists in both base and extended, the value will be overwritten by
+ * the value in 'extended'.
+ *
+ * It's up to the caller to free the memory of the returned VarList list.
+ */
+VarList * template_merge(VarList * base, VarList * extended);
+
 /** Goes through the list of variables and calls string_free() on each name and value. */
 void template_free(VarList * vars);
 

@@ -14,6 +14,13 @@ static void assertstr(char * actual, const char * expected) {
     }
 }
 
+static u32 varlist_size(VarList * vl) {
+    VarList *p = vl;
+    u32 s = 0;
+    while(p) { s++; p = p->next; }
+    return s;
+}
+
 static void test_template_set() {
     VarList * vars = template_set(0, "first", "one");
 
@@ -21,15 +28,18 @@ static void test_template_set() {
     assert(string_eq(vars->name, "first"));
     assert(string_eq(vars->value, "one"));
     assert(vars->next == 0);
+    assert(varlist_size(vars) == 1);
 
     vars = template_set(vars, "second", "two");
     assertstr(vars->name, "first");
     assertstr(vars->next->name, "second");
+    assert(varlist_size(vars) == 2);
 
     vars = template_set(vars, "first", "overwritten");
     assertstr(vars->value, "overwritten");
     assertstr(vars->next->name, "second");
     assert(vars->next->next == 0);
+    assert(varlist_size(vars) == 2);
 
     template_free(vars);
 }
@@ -122,6 +132,40 @@ static void test_template_get_usage() {
     string_free(template_string);
 }
 
+static void test_template_merge() {
+    {
+        VarList * a = 0;
+        a = template_set(a, "foo", "a");
+        a = template_set(a, "bar", "a");
+        VarList * b = 0;
+        a = template_set(a, "qux", "b");
+        a = template_set(a, "bar", "b");
+
+        VarList * result = template_merge(a, b);
+        assertstr(template_get(result, "foo"), "a");
+        assertstr(template_get(result, "bar"), "b");
+        assertstr(template_get(result, "qux"), "b");
+
+        template_free(a);
+        template_free(b);
+        template_free(result);
+    }
+
+    {
+        VarList * a = template_set(0, "key", "value");
+
+        VarList * result = template_merge(a, 0);
+        assertstr(template_get(a, "key"), "value");
+        template_free(result);
+
+        result = template_merge(0, a);
+        assertstr(template_get(a, "key"), "value");
+
+        template_free(result);
+        template_free(a);
+    }
+}
+
 int main() {
     test_template_set();
     test_template_get();
@@ -129,4 +173,5 @@ int main() {
     test_conditionals_basic();
     test_conditionals_nested();
     test_template_get_usage();
+    test_template_merge();
 }
