@@ -113,7 +113,7 @@ Usage:
         run_test(env_root, *args, **kwargs)
     test('cli: show version',
          ['--version'],
-         stdout="1.0.0"
+         stdout="1.1.0"
     )
     test('cli: usage on no args',
          [],
