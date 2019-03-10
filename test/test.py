@@ -1,192 +1,48 @@
 #!/usr/bin/env python3
 
-import subprocess
-from contextlib import contextmanager
-import os
-import re
-import tempfile
-import shutil
-import errno
+from test_framework import *
 
-CRED = '\033[91m'
-CGREEN = '\033[92m'
-CREDBG = '\x1b[6;39;41m'
-CGREENBG = '\x1b[6;30;42m'
-CBLUE = '\033[94m'
-CYELLOW = '\033[93m'
-CEND = '\033[0m'
-
-source_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-@contextmanager
-def test_env(filetree={}, shell_env={}):
-    tmpdir = tempfile.mkdtemp(prefix="qs-test-")
-    try:
-        for rel_path in filetree.keys():
-            abs_path = os.path.abspath(os.path.join(tmpdir, rel_path))
-            assert abs_path.startswith(tmpdir)
-            rel_dir = os.path.dirname(abs_path)
-            subprocess.check_call(['mkdir', '-p', rel_dir])
-            with open(abs_path, 'w') as f:
-                f.write(filetree[rel_path])
-        yield tmpdir
-    finally:
-        shutil.rmtree(tmpdir)
-
-def build():
-    print(subprocess.check_call(['make debug'], shell=True, cwd=source_root))
-    print(f"\n{CYELLOW}Rebuilding: OK!{CEND}")
-
-def std_stream_err(stream_name, expected, actual):
-    return f"{CRED} \u2717 Unexpected {stream_name}{CEND}:\nGot:\n[{CEND}{actual}]{CEND}\nExpected:\n[{CEND}{expected}]{CEND}"
-
-num_run = 0
-num_failed = 0
-num_skipped = 0
-error_reports = []
-
-def run_test(env_root,
-             name,
-             args,
-             exit_code=0,
-             stdout=None, stderr=None,
-             stdout_regex=None,
-             stderr_regex=None,
-             run_from_dir=None,
-             **kwargs):
-    global num_run, num_failed, error_reports, only_run
-
-    shutil.copy(os.path.join(source_root, 'bin/qs'), os.path.join(env_root))
-    cwd = os.path.join(env_root, run_from_dir) if run_from_dir else env_root
-    binary = os.path.join(env_root, 'qs')
-
-    num_run += + 1
-    result = subprocess.run([binary, *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, **kwargs)
-    [actual_exit, actual_stdout, actual_stderr] = (result.returncode, result.stdout.decode('utf-8').strip(), result.stderr.decode('utf-8').strip())
-
-    errors = []
-
-    if exit_code != actual_exit:
-        errors.append(f"\n{CRED} \u2717 Unexpected exit code{CEND}: Expected: {exit_code}, got: {actual_exit}")
-    if stdout_regex is not None and not re.match(stdout_regex, actual_stdout, re.MULTILINE | re.DOTALL):
-        errors.append(std_stream_err('stdout (regex)', stdout_regex, actual_stdout))
-    if stdout is not None and stdout != actual_stdout:
-        errors.append(std_stream_err('stdout', stdout, actual_stdout))
-    if stderr is not None and stderr != actual_stderr:
-        errors.append(std_stream_err('stderr', stderr, actual_stderr))
-    if stderr_regex is not None and not re.match(stderr_regex, actual_stderr, re.MULTILINE | re.DOTALL):
-        errors.append(std_stream_err('stderr (regex)', stderr_regex, actual_stderr))
-
-    if len(errors) > 0:
-        num_failed = num_failed + 1
-        print(f"{CREDBG}\u2717 Failed {CEND}{CRED} Test: [{name}]{CEND}")
-        error_reports += [
-            f"{CRED}----------------------------------------{CEND}",
-            f"{CREDBG}\u2717 Failed {CEND}{CRED} Test: [{name}]{CEND}",
-            f"{CRED}----------------------------------------{CEND}",
-            "Execution information:",
-            f"command: {CBLUE}./bin/qs %s{CEND}" % ' '.join(map((lambda x: "'%s'" % x), args)),
-            f"stdout:\n{actual_stdout}{CEND}\nstderr:\n{actual_stderr}{CEND}",
-            f"{CRED}Test failure(s):{CEND}",
-            '\n'.join(errors),
-            f"{CRED}----------------------------------------{CEND}",
-            "\n\n"
-        ]
-    else:
-        print(f"{CGREENBG}\u2713 Passed {CEND} {CGREEN}Test: [{name}] {CEND}")
-
-
-# test-start
-
-build()
-
-# Basic CLI stuff
-with test_env({}) as env_root:
-    usage_regex = r'''
-Usage:
-(.*)qs \[options\] <action name> \[--help\] \[<action arguments>, ...\]
-(.*)qs \[options\] --template <template string> \[<action arguments>, ...\]
-  --help to see more help.
-  --actions to see a list of available actions.
-'''.strip()
-    def test(*args, **kwargs):
-        run_test(env_root, *args, **kwargs)
-    test('cli: show version',
-         ['--version'],
-         stdout="1.1.0"
-    )
-    test('cli: usage on no args',
-         [],
-         exit_code=2,
-         stdout_regex=usage_regex,
-    )
+@test
+def basic_cli():
+    run('--version').and_expect(stdout='1.1.0')
+    run().and_expect(exit_code=2, stdout_regex='^Usage:')
 
     # Argument errors
-    test('cli: only variable (no action, no --template)',
-         ['--foo', 'bar'],
-         exit_code=2,
-         stdout_regex=r'^Error: Must provide either an action name or a --template.*%s' % usage_regex
-    )
-    test('cli: action and --template',
-         ['foobar', '--template', 'echo Hello'],
+    run('--foo', 'bar').and_expect(exit_code=2, stdout_regex=r'^Error: Must provide either an action name or a --template.*')
+    run('foobar', '--template', 'echo Hello').and_expect(
          exit_code=2,
          stdout='Error: Must provide either an action name or a template string (--template), not both.'
     )
-    test('cli: missing var value',
-         ['dummy', '--missing'],
-         exit_code=2,
-         stdout="Missing value for variable 'missing'"
-    )
-    test('cli: gave --config missing file',
-        ['non-existing-action', '--config', 'missing-file'],
+    run('dummy', '--missing').and_expect(exit_code=2, stdout="Missing value for variable 'missing'")
+    run('non-existing-action', '--config', 'missing-file').and_expect(
         exit_code=2,
         stdout_regex=r"Warning: could not read the config file 'missing-file'. Ignoring.",
     )
-    test('--template: empty',
-         ['--template'],
+    # test('--template: empty',
+    run('--template').and_expect(
          exit_code=2,
          stdout='--template should be followed by a template string.'
     )
 
-    # --template
-    test('--template',
-         ['--template', 'echo "it works!"'],
-         stdout=r"it works!"
-    )
-    test('--template dry run',
-         ['--dry-run', '--template', 'echo "it would work!"'],
-         stdout='Would run: cd .; QS_RUN_DIR=%s; echo "it would work!"' % env_root,
-    )
-    test('--template var subst',
-         ['--template', 'echo "Hello ${name}!"', '--name', 'Christoffer'],
-         stdout='Hello Christoffer!'
-    )
-    test('template: basic',
-         ['--template', 'echo "Hello ${name}!"', '--name', 'Christoffer'],
-         stdout='Hello Christoffer!'
-    )
-    test('template: basic (spaces)',
-         ['--template', 'echo "Hello ${ name }!"', '--name', 'Christoffer'],
-         stdout='Hello Christoffer!'
-    )
-    test('template: basic (narrow)',
-         ['--template', 'echo "Hello ${prefix}${name}!"', '--name', 'Christoffer', '--prefix', 'Mr.'],
-         stdout='Hello Mr.Christoffer!'
-    )
+@test
+def template_arg_substition(env_root):
+    run('--template', 'echo "it works!"').and_expect(stdout="it works!")
+    run('--dry-run', '--template', 'echo "it would work!"').and_expect(stdout='Would run: cd .; QS_RUN_DIR=%s; echo "it would work!"' % env_root)
 
-    # Template conditionals
-    test('template: if',
-        [
-            '--template',
-            'echo "a:${a?}set${else}unset${end} b:${b?}set${else}unset${end} c:${c?}set${else}unset${end}"',
-            '--a', '', '--b', 'yes',
-        ],
-        stdout='a:unset b:set c:unset'
-    )
+    run('--template', 'echo "Hello ${name}!"', '--name', 'Christoffer').and_expect(stdout='Hello Christoffer!')
+    run('--template', 'echo "Hello ${ name }!"', '--name', 'Christoffer').and_expect(stdout='Hello Christoffer!')
+    run('--template', 'echo "Hello ${prefix}${name}!"', '--name', 'Christoffer', '--prefix', 'Mr.').and_expect(stdout='Hello Mr.Christoffer!')
+    run(
+        '--template',
+        'echo "a:${a?}set${else}unset${end} b:${b?}set${else}unset${end} c:${c?}set${else}unset${end}"',
+        '--a', '',
+        '--b', 'yes'
+    ).and_expect(stdout='a:unset b:set c:unset')
+    run('--template', 'echo "EnvVar: $$MYENV"', env={'MYENV': 'foobar'}).and_expect(stdout='EnvVar: foobar')
 
-    # Template error handling
-    test('template: invalid var block',
-         ['--template', 'echo "Invalid: ${ invalid block }"'],
+@test
+def template_error_handling():
+    run('--template', 'echo "Invalid: ${ invalid block }"').and_expect(
          exit_code=2,
          stdout=(
              'Error: Only a single variable allowed per block.\n'
@@ -194,8 +50,7 @@ Usage:
              '                          ^'
          )
     )
-    test('template: missing end',
-         ['--template', 'echo "${name?}name"'],
+    run('--template', 'echo "${name?}name"').and_expect(
          exit_code=2,
          stdout=(
              'Error: Missing ${end}.\n'
@@ -203,8 +58,7 @@ Usage:
              '                  ^'
          )
     )
-    test('template: orphan end',
-         ['--template', 'echo "${name}name${end}"'],
+    run('--template', 'echo "${name}name${end}"').and_expect(
          exit_code=2,
          stdout=(
              'Error: Unexpected ${end} block.\n'
@@ -212,16 +66,15 @@ Usage:
              '                   ^^^'
          )
     )
-    test('template: garbage', ['--template', 'echo "${@&@!^(%!}'],
-         exit_code=2,
-         stdout=(
-             'Error: Unexpected character.\n'
-             'echo "${@&@!^(%!}\n'
-             '        ^'
-         )
+    run('--template', 'echo "${@&@!^(%!}').and_expect(
+        exit_code=2,
+        stdout=(
+            'Error: Unexpected character.\n'
+            'echo "${@&@!^(%!}\n'
+            '        ^'
+        )
     )
-    test('template: orphan else',
-         ['--template', 'echo "${else}name${end}"'],
+    run('--template', 'echo "${else}name${end}"').and_expect(
          exit_code=2,
          stdout=(
              'Error: Unexpected ${else} block.\n'
@@ -229,8 +82,7 @@ Usage:
              '        ^^^^'
          )
     )
-    test('template: multiple else',
-         ['--template', '${var?}1${else}2${else}3${end}'],
+    run('--template', '${var?}1${else}2${else}3${end}').and_expect(
          exit_code=2,
          stdout=(
              'Error: Too many ${else} blocks.\n'
@@ -238,13 +90,7 @@ Usage:
              '                  ^^^^'
          )
     )
-    test('template: escaped $',
-         ['--template', 'echo "EnvVar: $$MYENV"'],
-         stdout='EnvVar: foobar',
-         env = {'MYENV': 'foobar'},
-    )
-    test('template: unfinished escape seq',
-         ['--template', 'echo "$MYENV"'],
+    run('--template', 'echo "$MYENV"').and_expect(
          exit_code=2,
          stdout=(
              'Error: Unexpected character (use $$ to output a literal $).\n'
@@ -252,8 +98,7 @@ Usage:
              '       ^'
          ),
     )
-    test('template: conditional no variable',
-         ['--template', 'echo "${  ?  }"'],
+    run('--template', 'echo "${  ?  }"').and_expect(
          exit_code=2,
          stdout=(
              'Error: Missing variable.\n'
@@ -261,8 +106,7 @@ Usage:
              '          ^'
          ),
     )
-    test('template: unfinished variable block',
-         ['--template', '${var?'],
+    run('--template', '${var?').and_expect(
          exit_code=2,
          stdout=(
              'Error: Unfinished variable block.\n'
@@ -271,7 +115,16 @@ Usage:
          )
     )
 
-with test_env({
+@test({
+    ".git/config": '',
+    ".qs.cfg": 'make=echo "make in source root"\nreload=echo "reload in root"',
+    "src/.qs.cfg": 'make=echo "make local"',
+})
+def resolve_source_root_config(root):
+    run('make', run_from_dir='src').and_expect(stdout='make local')
+    run('reload', run_from_dir='src').and_expect(stdout='reload in root')
+
+@test({
     '.qs.cfg': '''
         local = echo "foo local"
         custom = echo "boop local"
@@ -284,200 +137,126 @@ with test_env({
     'custom.cfg': '''
         custom = echo "boop overwrite"
     ''',
-}) as env:
-    xdg_config_home = os.path.join(env, 'config')
-    run_test(env, 'show avialable commands with --actions',
-        ['--actions', '--config', 'custom.cfg'],
-        stdout_regex=r'''
-Available actions:
- - custom \s+ \({0}/custom.cfg\)
- - local \s+ \({0}/.qs.cfg\)
- - default \s+ \({0}/config/qs/default.cfg\)
-        '''.format(env).strip(),
-        env={'XDG_CONFIG_HOME': xdg_config_home},
+})
+def show_available_commands(root):
+    xdg_config_home = os.path.join(root, 'config')
+    env={'XDG_CONFIG_HOME': xdg_config_home}
+    run('--actions', '--config', 'custom.cfg', env=env).and_expect(
+        stdout = (
+            'Available actions:\n'
+            ' - custom                              ({0}/custom.cfg)\n'
+            ' - local                               ({0}/.qs.cfg)\n'
+            ' - default                             ({0}/config/qs/default.cfg)'
+        ).format(root)
     )
 
-# Config files
-
-with test_env({"custom.cfg": 'predefined=echo "Predefined in custom cfg works!"'}) as env:
-    run_test(env, '--config custom',
-        ['predefined', '--config', 'custom.cfg'],
-        stdout='Predefined in custom cfg works!'
-    )
+@test({"custom.cfg": 'predefined=echo "Predefined in custom cfg works!"'})
+def resolve_action_in_custom_config():
+    run('predefined', '--config', 'custom.cfg').and_expect(stdout='Predefined in custom cfg works!')
 
 # TODO - duplicate action names
 
-with test_env({'a.cfg': 'cmd=echo "a"', 'b.cfg': 'cmd=echo "b"'}) as env:
-    run_test(env, '--config prio',
-        ['cmd', '--config', 'a.cfg', '--config', 'b.cfg'],
-        stdout='b',
-    )
+@test({'a': 'cmd=echo "a"', 'b': 'cmd=echo "b"'})
+def custom_config_priority():
+    run('cmd', '--config', 'a', '--config', 'b').and_expect(stdout='b')
 
-# Broken config file testing
-
-with test_env({
+@test({
     'incomplete': 'action',
     'missing-action-value': 'action=',
     'missing-arg-value': 'arg:=',
     'misplaced-comment-action': 'action = # comment',
     'misplaced-comment-arg': 'arg := # comment',
     'weird-char': '!foo = bar',
-}) as env:
-    def test(filename, expected_message):
-        message_regex=r'Error in %s/%s: %s' % (env, filename, expected_message)
-        run_test(env, 'config errors: %s' % filename, ['action', '--config', filename], exit_code=1, stderr_regex=message_regex)
+})
+def broken_config_file_handling(root):
+    def do_test(filename, expected_message):
+        message_regex=r'Error in %s/%s: %s' % (root, filename, expected_message)
+        run('action', '--config', filename).and_expect(exit_code=1, stderr_regex=message_regex)
 
-    test('incomplete', "Expected '=' or ':='")
-    test('missing-action-value', "No value after '='")
-    test('missing-arg-value', "No value after ':='")
-    test('misplaced-comment-action', "Action template cannot start with '#'")
-    test('misplaced-comment-arg', "Argument value cannot start with '#'")
-    test('weird-char', "Unexpected character '!' \(33\)")
+    do_test('incomplete', "Expected '=' or ':='")
+    do_test('missing-action-value', "No value after '='")
+    do_test('missing-arg-value', "No value after ':='")
+    do_test('misplaced-comment-action', "Action template cannot start with '#'")
+    do_test('misplaced-comment-arg', "Argument value cannot start with '#'")
+    do_test('weird-char', "Unexpected character '!' \(33\)")
 
-# Config file resolution
-
-with test_env({
-    ".git/config": '',
-    ".qs.cfg": 'make=echo "make in source root"\nreload=echo "reload in root"',
-    "src/.qs.cfg": 'make=echo "make local"',
-}) as env:
-    run_test(env, 'source root: local preferred', ['make'],
-        stdout='make local',
-        run_from_dir="src"
-    )
-    run_test(env, 'source root: resolved', ['reload'],
-        stdout='reload in root',
-        run_from_dir="src"
-    )
-
-with test_env({
-    'custom-configs/qs/default.cfg': 'custom=echo "resolved custom xdg config"',
-}) as env:
+@test({'custom-configs/qs/default.cfg': 'custom=echo "resolved custom xdg config"'})
+def xdg_home_resolution(env):
     test_home = os.path.join(env, 'home')
     xdg_config_home = os.path.join(env, 'custom-configs')
 
-    run_test(env, 'resolve custom xdg config home', ['custom'],
-        env={'XDG_CONFIG_HOME': xdg_config_home, 'HOME': test_home},
-        stdout='resolved custom xdg config',
+    run('custom', env={'XDG_CONFIG_HOME': xdg_config_home, 'HOME': test_home}).and_expect(
+        stdout='resolved custom xdg config'
     )
-    run_test(env, 'resolve custom xdg config home (trailing slash)', ['custom'],
-        env={'XDG_CONFIG_HOME': xdg_config_home + '/', 'HOME': test_home},
-         stdout='resolved custom xdg config',
+    run('custom', env={'XDG_CONFIG_HOME': xdg_config_home + '/', 'HOME': test_home}).and_expect(
+         stdout='resolved custom xdg config'
     )
-    run_test(env, 'resolve custom xdg config home (invalid value)', ['custom'],
-        env={'XDG_CONFIG_HOME': '0;42;\t \n 4-43', 'HOME': test_home},
-        exit_code=2, stdout='Could not find action with name: custom',
+    run('custom', env={'XDG_CONFIG_HOME': '0;42;\t \n 4-43', 'HOME': test_home}).and_expect(
+        exit_code=2, stdout='Could not find action with name: custom'
     )
 
-with test_env({
+@test({
     'home/.config/qs/default.cfg': 'default=echo "resolved default xdg config"',
-}) as env:
+})
+def resolve_default_xdg_home_resolution(env):
     test_home = os.path.join(env, 'home')
+    run('default', env={'HOME': test_home}).and_expect(stdout='resolved default xdg config')
+    run('default', env={'HOME': test_home + '/'}).and_expect(stdout='resolved default xdg config')
+    run('default', env={'HOME': '\t \n\u2528-43'}).and_expect(exit_code=2, stdout='Could not find action with name: default')
 
-    run_test(env, 'resolve default xdg config home', ['default'],
-        env={'HOME': test_home},
-         stdout='resolved default xdg config',
-    )
-    run_test(env, 'resolve default xdg config home (trailing slash)', ['default'],
-        env={'HOME': test_home + '/'},
-         stdout='resolved default xdg config',
-    )
-    run_test(env, 'resolve default xdg config home (invalid value)', ['default'],
-        env={'HOME': '0;42;\t \n4-43'},
-        exit_code=2, stdout='Could not find action with name: default',
-    )
-
-with test_env({'.qs.cfg': 'cmd=echo "${0} and ${1}"'}) as env:
-    run_test(env, 'positional arguments',
-        ['cmd', 'foo', 'bar'],
-        stdout='foo and bar',
-    )
-
-with test_env({'.qs.cfg': 'cmd=echo "${0} and ${1}"'}) as env:
-    run_test(env, 'max pos args',
-        ['cmd', 'var1', 'var2', 'var3', 'var4', 'var5', 'var6', 'var7', 'var8', 'var9', 'var10', 'var11'],
+@test({'.qs.cfg': 'cmd=echo "${0} and ${1}"'})
+def positional_arguments():
+    run('cmd', 'foo', 'bar').and_expect(stdout='foo and bar')
+    run('cmd', 'var1', 'var2', 'var3', 'var4', 'var5', 'var6', 'var7', 'var8', 'var9', 'var10', 'var11').and_expect(
         exit_code=2,
         stdout_regex='At most 10 positional arguments can be given',
     )
 
-# Testing auto generated help for a specific action
-with test_env({
+@test({
     'mixed.cfg': 'foo=n${name}l${lname} ${0}',
     'multi.cfg': 'foo=n${name}l${name}${lname}/${ name } ${1}${0}${0}',
-}) as env:
-    run_test(env, 'auto generated help',
-        ['foo', '--help', '--config', 'mixed.cfg'],
+})
+def action_help_string():
+    run('foo', '--help', '--config', 'mixed.cfg').and_expect(
         exit_code=0,
         stdout='Usage: foo $0 [--name <value>] [--lname <value>]',
     )
-    run_test(env, 'auto generated help multiple ocurrances',
-        ['foo', '--help', '--config', 'multi.cfg'],
+    run('foo', '--help', '--config', 'multi.cfg').and_expect(
         exit_code=0,
         stdout='Usage: foo $0 $1 [--name <value>] [--lname <value>]',
     )
 
-with test_env({'.qs.cfg': 'cmd ='}) as env:
-    run_test(env, 'no value after action',
-        ['cmd', '--dry-run'],
-        exit_code=1,
-        stderr_regex=r"Error in (.*)\.qs\.cfg: No value after '='",
-    )
+@test({
+    '.qs.cfg': '''
+       flags := --foo bar
+       cmd=command ${flags}
+    '''
+})
+def default_args_in_configs():
+    run('cmd', '--dry-run').and_expect(stdout_regex=r"Would run: .* command --foo bar")
+    run('cmd', '--dry-run', '--flags', '/overwrite').and_expect(stdout_regex=r"Would run: .* command /overwrite")
 
-with test_env({'.qs.cfg': 'flags := --foo bar\ncmd=command ${flags}'}) as env:
-    run_test(env, 'works with predefined variables',
-             ['cmd', '--dry-run'],
-             stdout_regex=r"Would run: (.*?) command --foo bar"
-    )
-    run_test(env, 'can override config flags',
-             ['cmd', '--flags', 'overwritten', '--dry-run'],
-             stdout_regex=r"Would run: (.*?) command overwritten"
-    )
+@test({
+    'source/root/.git/config': '', # Define source root
+    'source/root/.qs.cfg': 'print-cwd=pwd',
+    'source/root/src/files/file.c': 'this is here to make the directory exist',
+    'a/b/ab.cfg': 'print-cwd=pwd',
+    '.qs.cfg': 'print-cwd=pwd',
+})
+def action_cwd(root):
+    # Pointing to a custom config should resolve from that config file
+    run('print-cwd', '--config', 'a/b/ab.cfg').and_expect(stdout='%s/a/b' % root)
+    # Running from the test root should use the cwd
+    run('print-cwd').and_expect(stdout='%s' % root)
+    # Running an action in the source root config should use the source root as cwd
+    run('print-cwd', run_from_dir='source/root/src/files').and_expect(stdout='%s/source/root' % root)
 
-with test_env({
-    'source/root/.git/config': '',
-    'source/root/.qs.cfg': 'cmd=cat file.txt',
-    'source/root/file.txt': 'source-root/file.txt',
-    'source/root/src/files/file.c': '',
-    'a/b/ab.cfg': 'cmd=cat file.txt',
-    'a/b/file.txt': 'root/a/b/file.txt',
-    '.qs.cfg': 'cmd=cat file.txt',
-    'file.txt': 'root/file.txt',
-}) as env:
-    run_test(env, 'runs from --config config dir', ['cmd', '--config', 'a/b/ab.cfg'],
-        stdout='root/a/b/file.txt'
-    )
-    run_test(env, 'runs from pwd config dir', ['cmd'],
-        stdout='root/file.txt'
-    )
-    run_test(env, 'runs from source root dir', ['cmd'],
-        stdout='source-root/file.txt',
-        run_from_dir='source/root/src/files',
-    )
-
-with test_env({
+@test({
     'workdir/file': '',
     '.git/config': '',
-    '.qs.cfg': 'cmd=echo "qs run from $$QS_RUN_DIR"',
-}) as env:
-    run_test(env, 'sets QS_RUN_DIR', ['cmd'],
-        stdout='qs run from %s/workdir' % env,
-        run_from_dir='workdir',
-    )
+    '.qs.cfg': 'cmd=echo "\$$QS_RUN_DIR=$$QS_RUN_DIR"',
+})
+def set_qs_run_dir(env):
+    run('cmd', run_from_dir='workdir').and_expect(stdout='$QS_RUN_DIR=%s/workdir' % env)
 
-with test_env({
-    '.qs.cfg': 'build=sh build.sh',
-    'build.sh': 'set -e\necho "Build OK"',
-}) as env:
-    run_test(env, 'running local scripts',
-        ['build'],
-        stdout='Build OK'
-    )
-
-# ===============================
-
-num_passed = num_run - num_failed - num_skipped
-if len(error_reports) > 0:
-    print("\n\n----------------------- Failing tests -----------------------\n")
-    for report in error_reports:
-        print(report)
-print(f"\nRan {num_run} tests: {CGREEN}{num_passed} passed{CEND}, {CYELLOW}{num_skipped}{CEND} skipped, {CRED}{num_failed} failed{CEND}")
+run_tests_and_report()

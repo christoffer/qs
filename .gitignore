@@ -2,3 +2,4 @@ bin/
 .vscode/
 .ccls-cache/
 test/*.test
+__pycache__
