@@ -308,7 +308,7 @@ parse_config(const char * filepath, ActionTemplatePair ** result_pairs, VarList 
             offset = skip_whitespace(offset, filecontent);
 
             if (
-                (offset + 2 < content_len)
+                ((offset + 1) < content_len)
                 && filecontent[offset] == ':'
                 && filecontent[offset + 1] == '='
             ) {
@@ -332,7 +332,13 @@ parse_config(const char * filepath, ActionTemplatePair ** result_pairs, VarList 
             // Special case. We don't allow the value to start with a comment because it's
             // a bit ambiguous: "action = # is this a value or comment?"
             if (filecontent[offset] == '#') {
-                print_error("Value cannot start with '#'", filepath);
+                if (string_len(pending_action_name)) {
+                    print_error("Action template cannot start with '#'", filepath);
+                } else if (string_len(pending_var_name)) {
+                    print_error("Argument value cannot start with '#'", filepath);
+                } else {
+                    assert(false);
+                }
                 error = true;
                 offset = read_until_newline(offset, filecontent, 0);
                 continue;
@@ -360,7 +366,13 @@ parse_config(const char * filepath, ActionTemplatePair ** result_pairs, VarList 
 
                 offset = new_offset;
             } else {
-                print_error("No value after '='", filepath);
+                if (string_len(pending_action_name)) {
+                    print_error("No value after '='", filepath);
+                } else if (string_len(pending_var_name)) {
+                    print_error("No value after ':='", filepath);
+                } else {
+                    assert(false);
+                }
                 error = true;
                 offset = read_until_newline(offset, filecontent, 0);
                 continue;

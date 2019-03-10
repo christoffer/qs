@@ -318,12 +318,21 @@ with test_env({'a.cfg': 'cmd=echo "a"', 'b.cfg': 'cmd=echo "b"'}) as env:
 with test_env({
     'incomplete': 'action',
     'missing-action-value': 'action=',
-    'missing-arg-value': 'action:=',
+    'missing-arg-value': 'arg:=',
+    'misplaced-comment-action': 'action = # comment',
+    'misplaced-comment-arg': 'arg := # comment',
+    'weird-char': '!foo = bar',
 }) as env:
-    def test(filename, expected_regex):
-        run_test(env, 'config errors: %s' % filename, ['action', '--config', filename], exit_code=1, stderr_regex=expected_regex)
+    def test(filename, expected_message):
+        message_regex=r'Error in %s/%s: %s' % (env, filename, expected_message)
+        run_test(env, 'config errors: %s' % filename, ['action', '--config', filename], exit_code=1, stderr_regex=message_regex)
 
-    test('incomplete', r"Error in (.*?)/incomplete: Expected '=' or ':='")
+    test('incomplete', "Expected '=' or ':='")
+    test('missing-action-value', "No value after '='")
+    test('missing-arg-value', "No value after ':='")
+    test('misplaced-comment-action', "Action template cannot start with '#'")
+    test('misplaced-comment-arg', "Argument value cannot start with '#'")
+    test('weird-char', "Unexpected character '!' \(33\)")
 
 # Config file resolution
 
@@ -378,13 +387,6 @@ with test_env({
         exit_code=2, stdout='Could not find action with name: default',
     )
 
-with test_env({'.qs.cfg': 'cmd =  # error, no comment allowed here'}) as env:
-    run_test(env, 'errors with comment values',
-        ['cmd'],
-        exit_code=1,
-        stderr_regex=r"Error in (.*)\.qs\.cfg: Value cannot start with '#'"
-    )
-
 with test_env({'.qs.cfg': 'cmd=echo "${0} and ${1}"'}) as env:
     run_test(env, 'positional arguments',
         ['cmd', 'foo', 'bar'],
@@ -430,14 +432,6 @@ with test_env({'.qs.cfg': 'flags := --foo bar\ncmd=command ${flags}'}) as env:
              ['cmd', '--flags', 'overwritten', '--dry-run'],
              stdout_regex=r"Would run: (.*?) command overwritten"
     )
-
-with test_env({'.qs.cfg': 'flags :='}) as env:
-    run_test(env, 'errors on missing variable value',
-             ['cmd'],
-             exit_code=1,
-             stderr_regex=r"Error in (.*)\.qs\.cfg: Expected '=' or ':='",
-    )
-
 
 with test_env({
     'source/root/.git/config': '',

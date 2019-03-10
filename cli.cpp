@@ -62,7 +62,7 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
                     options->config_files = string_push_dup_front(options->config_files, resolved_path);
                     free(resolved_path);
                 } else {
-                    fprintf(stdout, "Warning: could not read the config file '%s'. Ignoring.", current_arg);
+                    fprintf(stdout, "Warning: could not read the config file '%s'. Ignoring.\n", current_arg);
                 }
             } else if (string_eq(current_arg, "--help")) {
                 if (options->action_name) {
