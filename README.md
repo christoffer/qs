@@ -1,4 +1,4 @@
--e ```
+```
 
 qs (quick-scripts): A tiny utility for keeping a catalogue of one-liners.
 
