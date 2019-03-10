@@ -102,20 +102,31 @@ build()
 
 # Basic CLI stuff
 with test_env({}) as env_root:
+    usage_regex = r'''
+Usage:
+(.*)qs \[options\] <action name> \[--help\] \[<action arguments>, ...\]
+(.*)qs \[options\] --template <template string> \[<action arguments>, ...\]
+  --help to see more help.
+  --actions to see a list of available actions.
+'''.strip()
     def test(*args, **kwargs):
         run_test(env_root, *args, **kwargs)
-
-    test('show version',
+    test('cli: show version',
          ['--version'],
          stdout="1.0.0"
     )
-    test('usage on no args',
+    test('cli: usage on no args',
          [],
          exit_code=2,
-         stdout_regex=r'Usage:.*/qs \[flags\] <action name> | --template <template string> \[variables\]'
+         stdout_regex=usage_regex,
     )
 
     # Argument errors
+    test('cli: only variable (no action, no --template)',
+         ['--foo', 'bar'],
+         exit_code=2,
+         stdout_regex=r'^Error: Must provide either an action name or a --template.*%s' % usage_regex
+    )
     test('cli: action and --template',
          ['foobar', '--template', 'echo Hello'],
          exit_code=2,
@@ -125,11 +136,6 @@ with test_env({}) as env_root:
          ['dummy', '--missing'],
          exit_code=2,
          stdout="Missing value for variable 'missing'"
-    )
-    test('cli: only variable',
-         ['--foo', 'bar'],
-         exit_code=2,
-         stdout='Must provide either an action name or a --template'
     )
     test('cli: gave --config missing file',
         ['non-existing-action', '--config', 'missing-file'],
@@ -267,31 +273,38 @@ with test_env({}) as env_root:
 
 with test_env({
     '.qs.cfg': '''
-        foo = echo "foo"
-        bar = echo "bar"
+        local = echo "foo local"
+        custom = echo "boop local"
     ''',
     'config/qs/default.cfg': '''
-        qux = echo "qux"
-        foo = echo "foo again"
+        local = echo "foo local"
+        custom = echo "boop local"
+        default = echo "qux default"
     ''',
     'custom.cfg': '''
-        bar = echo "bar again"
-        boop = echo "boop"
+        custom = echo "boop overwrite"
     ''',
 }) as env:
     xdg_config_home = os.path.join(env, 'config')
-    run_test(env, 'show avialable commands with --list',
-        ['--list', '--config', 'custom.cfg'],
-        stdout_regex='',
+    run_test(env, 'show avialable commands with --actions',
+        ['--actions', '--config', 'custom.cfg'],
+        stdout_regex=r'''
+Available actions:
+ - custom \s+ \({0}/custom.cfg\)
+ - local \s+ \({0}/.qs.cfg\)
+ - default \s+ \({0}/config/qs/default.cfg\)
+        '''.format(env).strip(),
         env={'XDG_CONFIG_HOME': xdg_config_home},
     )
 
 # Config files
+
 with test_env({"custom.cfg": 'predefined=echo "Predefined in custom cfg works!"'}) as env:
     run_test(env, '--config custom',
         ['predefined', '--config', 'custom.cfg'],
         stdout='Predefined in custom cfg works!'
     )
+
 # TODO - duplicate action names
 
 with test_env({'a.cfg': 'cmd=echo "a"', 'b.cfg': 'cmd=echo "b"'}) as env:
@@ -300,16 +313,25 @@ with test_env({'a.cfg': 'cmd=echo "a"', 'b.cfg': 'cmd=echo "b"'}) as env:
         stdout='b',
     )
 
-with test_env({'.qs.cfg': 'borked'}) as env:
-    run_test(env, 'invalid config (incomplete)',
-        ['broken'], exit_code=1, stderr_regex=r"Error in (.*?)/.qs.cfg: Expected '='"
-    )
+# Broken config file testing
+
+with test_env({
+    'incomplete': 'action',
+    'missing-action-value': 'action=',
+    'missing-arg-value': 'action:=',
+}) as env:
+    def test(filename, expected_regex):
+        run_test(env, 'config errors: %s' % filename, ['action', '--config', filename], exit_code=1, stderr_regex=expected_regex)
+
+    test('incomplete', r"Error in (.*?)/incomplete: Expected '=' or ':='")
+
+# Config file resolution
 
 with test_env({
     ".git/config": '',
     ".qs.cfg": 'make=echo "make in source root"\nreload=echo "reload in root"',
     "src/.qs.cfg": 'make=echo "make local"',
-    }) as env:
+}) as env:
     run_test(env, 'source root: local preferred', ['make'],
         stdout='make local',
         run_from_dir="src"

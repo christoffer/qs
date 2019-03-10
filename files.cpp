@@ -7,8 +7,7 @@
 #include "string.h"
 
 String
-read_entire_file(char * filepath)
-{
+read_entire_file(const char * filepath) {
     assert(filepath);
 
     FILE * fp;
@@ -27,8 +26,7 @@ read_entire_file(char * filepath)
     u32 bytes_read = fread(result, sizeof(char), filesize, fp);
     fclose(fp);
 
-    if (bytes_read != filesize)
-    {
+    if (bytes_read != filesize) {
         fprintf(stderr, "Warning: Failed to read file %s\n", filepath);
         string_free(result);
         return 0;
@@ -40,8 +38,7 @@ read_entire_file(char * filepath)
 }
 
 bool
-is_readable_regfile(char * path)
-{
+is_readable_regfile(const char * path) {
     struct stat file_stat;
     // NOTE(christoffer) stat should follow symlinks, which we want
     bool is_regfile = (stat(path, &file_stat) == 0 && S_ISREG(file_stat.st_mode));
@@ -50,8 +47,7 @@ is_readable_regfile(char * path)
 }
 
 bool
-is_readable_dir(char * path)
-{
+is_readable_dir(const char * path) {
     struct stat file_stat;
     bool is_dir = (stat(path, &file_stat) == 0 && S_ISDIR(file_stat.st_mode));
     bool is_readable = access(path, F_OK) != -1;

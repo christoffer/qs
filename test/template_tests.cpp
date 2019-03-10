@@ -63,7 +63,7 @@ static void test_basic_render() {
     vars = template_set(vars, "name", "Christoffer");
     vars = template_set(vars, "lastname", "Klang");
 
-    String result = template_render(vars, template_string);
+    String result = template_render(template_string, vars);
     assertstr(result, "hello Christoffer Klang!");
     string_free(template_string);
     template_free(vars);
@@ -76,17 +76,17 @@ static void test_conditionals_basic() {
 
     String result;
 
-    result = template_render(vars, template_string);
+    result = template_render(template_string, vars);
     assertstr(result, "Hi!");
     string_free(result);
 
     vars = template_set(vars, "name", "Christoffer");
-    result = template_render(vars, template_string);
+    result = template_render(template_string, vars);
     assertstr(result, "Hello Christoffer");
     string_free(result);
 
     vars = template_set(vars, "name", "");
-    result = template_render(vars, template_string);
+    result = template_render(template_string, vars);
     assertstr(result, "Hi!");
     string_free(result);
 
@@ -100,22 +100,22 @@ static void test_conditionals_nested() {
 
     String result;
 
-    result = template_render(vars, template_string);
+    result = template_render(template_string, vars);
     assertstr(result, "!a&!b");
     string_free(result);
 
     vars = template_set(vars, "a", "a");
-    result = template_render(vars, template_string);
+    result = template_render(template_string, vars);
     assertstr(result, "a&!b");
     string_free(result);
 
     vars = template_set(vars, "b", "b");
-    result = template_render(vars, template_string);
+    result = template_render(template_string, vars);
     assertstr(result, "a&b");
     string_free(result);
 
     vars = template_set(vars, "a", "");
-    result = template_render(vars, template_string);
+    result = template_render(template_string, vars);
     assertstr(result, "!a&b");
     string_free(result);
 
@@ -123,9 +123,9 @@ static void test_conditionals_nested() {
     string_free(template_string);
 }
 
-static void test_template_get_usage() {
+static void test_template_generate_usage() {
     String template_string = string_new("something ${0} and then ${name}, and then ${something}, and finally ${1}");
-    String result = template_get_usage(template_string, "foobar");
+    String result = template_generate_usage(template_string, "foobar");
     assertstr(result, "Usage: foobar $0 $1 [--name <value>] [--something <value>]\n");
 
     string_free(result);
@@ -172,6 +172,6 @@ int main() {
     test_basic_render();
     test_conditionals_basic();
     test_conditionals_nested();
-    test_template_get_usage();
+    test_template_generate_usage();
     test_template_merge();
 }

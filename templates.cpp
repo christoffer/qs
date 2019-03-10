@@ -223,8 +223,6 @@ _process_conditional(
     while ((token = token->next)) {
         skip_block = skip_all || skip_block;
 
-        // printf(" xxx conditional token: %s (type: %d, skip: %d)\n", token->value, token->type, skip_block);
-
         if (token->type == TT_Str) {
             if (skip_block)
                 continue;
@@ -335,7 +333,7 @@ template_get(VarList * node, const char * name) {
 }
 
 String
-template_get_usage(String template_string, const char * action_name) {
+template_generate_usage(String template_string, const char * action_name) {
     LinkedToken * tokens = tokenize_template(template_string);
     if (!tokens) {
         return 0;
@@ -397,7 +395,7 @@ template_get_usage(String template_string, const char * action_name) {
 }
 
 String
-template_render(VarList * vars, String template_string) {
+template_render(String template_string, VarList * vars) {
     LinkedToken * tokens = tokenize_template(template_string);
 
     if (!tokens) {

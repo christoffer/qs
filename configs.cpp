@@ -175,8 +175,7 @@ skip_whitespace(u32 start, String content)
 {
     u32 offset = start;
     u32 content_len = string_len(content);
-    while((offset < content_len) && (content[offset] == ' '))
-    {
+    while((offset < content_len) && (content[offset] == ' ')) {
         offset++;
     }
     return offset;
@@ -186,12 +185,11 @@ static u32
 read_identifier(u32 start, String content, String * value)
 {
     u32 offset = start;
-    while(offset < string_len(content) && is_identifier_char(content[offset]))
-    {
+    u32 content_len = string_len(content);
+    while((offset < content_len) && is_identifier_char(content[offset])) {
         offset++;
     }
-    if (offset > start)
-    {
+    if (offset > start) {
         *value = string_copy(*value, (content + start), offset - start);
     }
     return offset;
@@ -241,11 +239,16 @@ remove_duplicate_actions(ActionTemplatePair * pairs, const char * filepath) {
     return head;
 }
 
+static void
+print_error(const char * message, const char * filepath) {
+    fprintf(stderr, "Error in %s: %s\n", filepath, message);
+}
+
 static bool
-parse_config(char * filepath, ActionTemplatePair ** result_pairs, VarList ** result_vars) {
+parse_config(const char * filepath, ActionTemplatePair ** result_pairs, VarList ** result_vars) {
     String filecontent;
     if (!(filecontent = read_entire_file(filepath))) {
-        fprintf(stderr, "Error: failed to read config file: %s, aborting.\n", filepath);
+        print_error("Failed to read config file. Aborting", filepath);
         string_free(filecontent);
         return false;
     }
@@ -254,20 +257,25 @@ parse_config(char * filepath, ActionTemplatePair ** result_pairs, VarList ** res
     // The head, and the tail of the pair list
     ActionTemplatePair * head = 0;
     ActionTemplatePair * end = 0;
+
     // The list of variables declared in the config file
     VarList * vars = 0;
+
     // Error flag set if the config file is invalid
     bool error = false;
 
     // Temporary storage variable for various values
     String value = string_new();
+
     // The parsed variable name to read a value for
     String pending_var_name = string_new();
+
     // The parse action name to read a template for
     String pending_action_name = string_new();
 
     // Offset into filecontent buffer we're currently reading
     u32 offset = 0;
+
     // Speculative offset after attempting to parse a certain sequence of bytes
     // (e.g. an identifier). We keep this separate to be able to compare them
     // in order to detect if the sequence was read or not.
@@ -283,7 +291,10 @@ parse_config(char * filepath, ActionTemplatePair ** result_pairs, VarList ** res
         offset = skip_whitespace(offset, filecontent);
 
         // Inspect the first non-whitespace content of the line
-        if (filecontent[offset] == '#') {
+        if (!filecontent[offset]) {
+            // EOF
+            break;
+        } else if (filecontent[offset] == '#') {
             // Rest of the line is a comment
             offset = read_until_newline(offset, filecontent, 0);
         } else if (filecontent[offset] == '\n') {
@@ -309,8 +320,7 @@ parse_config(char * filepath, ActionTemplatePair ** result_pairs, VarList ** res
                 offset += 1; // eat =
                 pending_action_name = string_copy(pending_action_name, value);
             } else {
-                // Error
-                fprintf(stderr, "Error in %s: Expected '=' or ':='\n", filepath);
+                print_error("Expected '=' or ':='", filepath);
                 error = true;
                 offset = read_until_newline(offset, filecontent, 0);
                 continue;
@@ -322,7 +332,7 @@ parse_config(char * filepath, ActionTemplatePair ** result_pairs, VarList ** res
             // Special case. We don't allow the value to start with a comment because it's
             // a bit ambiguous: "action = # is this a value or comment?"
             if (filecontent[offset] == '#') {
-                fprintf(stderr, "Error in %s: Value cannot start with '#'\n", filepath);
+                print_error("Value cannot start with '#'", filepath);
                 error = true;
                 offset = read_until_newline(offset, filecontent, 0);
                 continue;
@@ -350,8 +360,7 @@ parse_config(char * filepath, ActionTemplatePair ** result_pairs, VarList ** res
 
                 offset = new_offset;
             } else {
-                // Error -- didn't get more content
-                fprintf(stderr, "Error in %s: No value after '='\n", filepath);
+                print_error("No value after '='", filepath);
                 error = true;
                 offset = read_until_newline(offset, filecontent, 0);
                 continue;
@@ -360,12 +369,13 @@ parse_config(char * filepath, ActionTemplatePair ** result_pairs, VarList ** res
             // There shouldn't be a case where we didn't deplete the line or content
             assert((filecontent[offset] == '\n') || (filecontent[offset] == '\0'));
         } else {
-            fprintf(stderr, "Error: Unexpected character: '%c'\n", filecontent[offset]);
+            char errormsg[50] = {0};
+            snprintf(errormsg, 50, "Unexpected character '%c' (%d)", filecontent[offset], filecontent[offset]);
+            print_error(errormsg, filepath);
             error = true;
             offset = read_until_newline(offset, filecontent, 0);
             continue;
         }
-
     }
 
     // Free temporary data used during parsing
@@ -395,11 +405,11 @@ config_get_action_names(char * config_file_path, StringList ** action_names) {
     if (parse_config(config_file_path, &pairs, &vars)) {
         ActionTemplatePair * pair = pairs;
         while (pair) {
-            printf("Found: %s\n", pair->action_name);
             found_action_names = string_push_dup_front(found_action_names, pair->action_name);
             pair = pair->next;
         }
         _free_pairs(pairs);
+        template_free(vars);
         *action_names = found_action_names;
         return true;
     }

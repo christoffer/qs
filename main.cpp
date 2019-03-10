@@ -9,6 +9,7 @@
 #include "files.h"
 #include "cli.h"
 #include "configs.h"
+#include "help_text.h"
 
 #define QUICK_SCRIPT_VERSION "1.0.0"
 
@@ -18,36 +19,44 @@ print_version() {
 }
 
 static void
-print_usage(char *exec_name) {
+print_usage(const char * exec_name) {
     printf("Usage:\n");
-    printf("%s [flags] <action name> | --template <template string> [variables]\n", exec_name);
+    printf("%s [options] <action name> [--help] [<action arguments>, ...]\n", exec_name);
+    printf("%s [options] --template <template string> [<action arguments>, ...]\n", exec_name);
+    printf("  --help to see more help.\n");
+    printf("  --actions to see a list of available actions.\n");
 }
 
 static void
-print_help() {
-    printf("\n");
-    printf("qs (quick-scripts): A tiny utility for keeping a catalogue of one-liners.\n");
-    printf("\n");
-    printf("Scripts are defined using a trivial key=value binding of an <action name>=<template>.\n");
-    printf("The templates may contain variables which are substituted using arguments given to qs.\n");
-    printf("\n");
-    printf("Usage:\n");
-    printf("qs <action name> [options] [variables]\n");
-    printf("Options:\n");
-    printf("  --dry-run:  Just print the command that would have run, don't actually run it.\n");
-    printf("  --verbose:  Print more information while executing.\n");
-    printf("  --template: Ignore the preconfigured templates and use an explicit template instead. Cannot be used together with <action name>\n");
-    printf("  --version:  Print the current version and exit.\n");
-    printf("\n");
-    printf("Any other --<argument> is interpreted as a variable substitution to use for the resolved template.\n");
-    printf("\n");
-    printf("Action name is a preconfigured action name in one of the resolved config files (in order).\n");
-    printf(" - `.qs.cfg` file in the current directory\n");
-    printf(" - `.qs.cfg` file in a parent git source-root of the current directory\n");
-    printf(" - `$XDG_CONFIG_HOME/qs/default.cfg`\n");
-    printf(" - `$HOME/.configs/qs/default.cfg` (unless XDG_CONFIG_HOME is set)\n");
-    printf("\n");
+print_available_actions(StringList * config_filepaths) {
+    StringList * config_path_item = config_filepaths;
+    StringList * seen = 0;
+    bool did_print_header = false;
+    while(config_path_item) {
+        String config_path = config_path_item->string;
+        StringList * action_names = 0;
+        if (config_get_action_names(config_path, &action_names)) {
+            if (!did_print_header) {
+                fprintf(stdout, "Available actions:\n");
+                did_print_header = true;
+            }
+            StringList * action_name_item = action_names;
+            while (action_name_item) {
+                String action_name = action_name_item->string;
+                bool shadowed = string_list_contains(seen, action_name);
+                if (!shadowed) {
+                    fprintf(stdout, " - %-35s (%s)\n", action_name, config_path);
+                    seen = string_push_dup_front(seen, action_name);
+                }
+                action_name_item = action_name_item->next;
+            }
+            string_list_free(action_names);
+        }
+        config_path_item = config_path_item->next;
+    }
+    string_list_free(seen);
 }
+
 /**
  * Break a filepath at the last forward slash ('/').
  * If there are no '/' characters in the provided filepath, a '.' character is returned.
@@ -95,7 +104,7 @@ exec_with_options(CommandLineOptions options, String shell_command, char * cwd)
 }
 
 static void
-resolve_complete_config_file_list(CommandLineOptions * options) {
+populate_options_with_default_config_files(CommandLineOptions * options) {
     StringList * default_config_files = resolve_default_config_files();
 
     if (options->config_files) {
@@ -125,6 +134,140 @@ enum ErrorType {
     ErrorType_User = 2,
 };
 
+static ErrorType
+process_options(CommandLineOptions * options, const char * program_name) {
+    // Handle no argument invokation
+    if (options->no_arguments_given) {
+        print_usage(program_name);
+        return ErrorType_User;
+    }
+
+    // Handle --help
+    if (options->print_help) {
+        print_help();
+        return ErrorType_None;
+    }
+
+    // Handle --version
+    if (options->print_version) {
+        print_version();
+        return ErrorType_None;
+    }
+
+    if (options->print_available_actions) {
+        populate_options_with_default_config_files(options);
+        print_available_actions(options->config_files);
+        return ErrorType_None;
+    }
+
+    if (options->action_name && options->template_string) {
+        fprintf(stdout, "Error: Must provide either an action name or a template string (--template), not both.\n");
+        return ErrorType_User;
+    }
+
+    if (!options->action_name && !options->template_string) {
+        fprintf(stdout, "Error: Must provide either an action name or a --template\n\n");
+        print_usage(program_name);
+        return ErrorType_User;
+    }
+
+    if (options->template_string) {
+        if (options->verbose) {
+            fprintf(stdout, "Resolved template: %s\n", options->template_string);
+        }
+        String command = template_render(options->template_string, options->variables);
+        if (command) {
+            exec_with_options(*options, command, 0);
+            string_free(command);
+            return ErrorType_None;
+        }
+        return ErrorType_User;
+    }
+
+    if (options->action_name) {
+        // User gave an action name. Dig into the config files and try to resolve it.
+        populate_options_with_default_config_files(options);
+
+        // Search through the configuration files for an action with the given name in order to find
+        // the template.
+        char * action_name = options->action_name;
+        char * config_path = 0;
+
+        // Loop through the configuration files and look for the first declaration of the
+        // sought action.
+        ResolvedTemplateResult template_res;
+        StringList * config_file = options->config_files;
+        while (config_file) {
+            config_path = config_file->string;
+            template_res = resolve_template_for_action(config_path, action_name);
+            if (template_res.parse_error) {
+                return ErrorType_Error;
+            } else if (template_res.template_string) {
+                // Found the action template, stop looking
+                break;
+            }
+            config_file = config_file->next;
+        }
+
+        if (template_res.template_string) {
+            // Successfully resolved a valid template for the action
+            if (options->verbose) {
+                fprintf(stdout, "Resolved template: %s\nFrom: %s\n", template_res.template_string, config_path ? config_path : "--template");
+                if (template_res.vars) {
+                    fprintf(stdout, "with predefined variable values:\n");
+                    VarList * vars = template_res.vars;
+                    while(vars) {
+                        fprintf(stdout, " - ${%s} => %s\n", vars->name, vars->value);
+                        vars = vars->next;
+                    }
+                }
+            }
+
+            ErrorType error;
+            if (options->print_action_help) {
+                String usage = template_generate_usage(template_res.template_string, options->action_name);
+                if (usage) {
+                    fprintf(stdout, "%s", usage);
+                    string_free(usage);
+                    error = ErrorType_None;
+                } else {
+                    fprintf(stderr, "Invalid action template: %s\n", template_res.template_string);
+                    error = ErrorType_Error;
+                }
+            } else {
+                // Set the config path for the template render function to use when setting the
+                // command QS_RUN_DIR varibable
+                if (config_path)
+                    dirname(config_path);
+
+                // Merge the user defined variables into the config file provided variables
+                VarList * merged_vars = template_merge(template_res.vars, options->variables);
+                String command = template_render(template_res.template_string, merged_vars);
+                template_free(merged_vars);
+                if (command) {
+                    exec_with_options(*options, command, config_path);
+                    string_free(command);
+                    error = ErrorType_None;
+                } else {
+                    fprintf(stderr, "Invalid action template: %s\n", template_res.template_string);
+                    error = ErrorType_Error;
+                }
+            }
+
+            // Free the template result resources
+            string_free(template_res.template_string);
+            template_free(template_res.vars);
+            return error;
+        } else {
+            // Failed to find an template for the action
+            fprintf(stdout, "Could not find action with name: %s\n", action_name);
+            return ErrorType_User;
+        }
+    }
+
+    assert(false); // All possible combinations should have been exhausted at this point
+}
+
 int
 main(int argc, char **argv)
 {
@@ -144,126 +287,7 @@ main(int argc, char **argv)
             /* fallthrough */;
     }
 
-    if (options.no_arguments_given) {
-        print_usage(argv[0]);
-        return ErrorType_User;
-    }
-
-    if (options.print_help) {
-        print_help();
-        return ErrorType_None;
-    }
-
-    if (options.print_version) {
-        print_version();
-        return ErrorType_None;
-    }
-
-    ErrorType error = ErrorType_None;
-
-    String command = 0;
-    if (!options.action_name && !options.template_string) {
-        fprintf(stdout, "Must provide either an action name or a --template\n");
-        return ParseResult_Invalid;
-    }
-
-    if (options.print_available_actions) {
-        resolve_complete_config_file_list(&options);
-
-    } else if (options.action_name && options.template_string) {
-        fprintf(stdout, "Error: Must provide either an action name or a template string (--template), not both.\n");
-        return ErrorType_User;
-    } else if (!options.action_name && !options.template_string) {
-        fprintf(stdout, "Must provide either an action name or a --template. Use --list to see a list of the available actions.\n");
-        return ParseResult_Invalid;
-    } else if (options.template_string) {
-        if (options.verbose) {
-            fprintf(stdout, "Resolved template: %s\n", options.template_string);
-        }
-        command = template_render(options.variables, options.template_string);
-        if (command) {
-            exec_with_options(options, command, 0);
-        } else {
-            error = ErrorType_User;
-        }
-    } else if (options.action_name) {
-        // User gave an action name. Dig into the config files and try to resolve it.
-        resolve_complete_config_file_list(&options);
-
-        // Search through the configuration files for an action with the given name in order to find
-        // the template.
-        char * action_name = options.action_name;
-        char * config_path = 0;
-
-        ResolvedTemplateResult template_res;
-
-        StringList * config_file = options.config_files;
-        while (config_file) {
-            config_path = config_file->string;
-            template_res = resolve_template_for_action(config_path, action_name);
-            if (template_res.parse_error) {
-                error = ErrorType_Error;
-            } else {
-                if (template_res.template_string) {
-                    // Found the action template, stop looking
-                    break;
-                }
-                assert(!template_res.template_string);
-                assert(!template_res.vars);
-            }
-            config_file = config_file->next;
-        }
-
-        // error, found, not found
-
-        if (error == ErrorType_None) {
-            if (template_res.template_string) {
-                // Successfully resolved a valid template for the action
-                if (options.verbose) {
-                    fprintf(stdout, "Resolved template: %s\nFrom: %s\n", template_res.template_string, config_path ? config_path : "--template");
-                    if (template_res.vars) {
-                        fprintf(stdout, "with predefined variable values:\n");
-                        VarList * vars = template_res.vars;
-                        while(vars) {
-                            fprintf(stdout, " - ${%s} => %s\n", vars->name, vars->value);
-                            vars = vars->next;
-                        }
-                    }
-                }
-
-                if (options.print_action_help) {
-                    String usage = template_get_usage(template_res.template_string, options.action_name);
-                    if (usage) {
-                        fprintf(stdout, "%s", usage);
-                    }
-                } else {
-                    // Set the config path for the template render function to use when setting the
-                    // command QS_RUN_DIR varibable
-                    if (config_path)
-                        dirname(config_path);
-
-                    // Merge the user defined variables into the config file provided variables
-                    VarList * merged_vars = template_merge(template_res.vars, options.variables);
-                    command = template_render(merged_vars, template_res.template_string);
-                    if (command) {
-                        exec_with_options(options, command, config_path);
-                    } else {
-                        // Not a renderable template
-                        error = ErrorType_User;
-                    }
-                }
-                string_free(template_res.template_string);
-                template_free(template_res.vars);
-            } else {
-                // Failed to find an template for the action
-                fprintf(stdout, "Could not find action with name: %s\n", action_name);
-                error = ErrorType_User;
-            }
-        }
-    } else {
-        assert(false); // All possible combinations should have been exhausted at this point
-    }
-
+    ErrorType error = process_options(&options, argv[0]);
     free_cli_options_resources(options);
     exit(error);
 }

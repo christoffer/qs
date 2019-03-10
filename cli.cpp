@@ -94,7 +94,7 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
                 } else {
                     options->template_string = string_new(current_arg);
                 }
-            } else if (string_eq(current_arg, "--list")) {
+            } else if (string_eq(current_arg, "--actions")) {
                     options->print_available_actions = true;
             } else {
                 /*** Parse as named varible ***/
@@ -134,16 +134,6 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
         current_arg = args[++arg_index];
     }
 
-    if (options->action_name && options->template_string) {
-        fprintf(stdout, "Error: Must provide either an action name or a template string (--template), not both.\n");
-        return ParseResult_Invalid;
-    }
-
-    if (!options->action_name && !options->template_string) {
-        fprintf(stdout, "Must provide either an action name or a --template\n");
-        return ParseResult_Invalid;
-    }
-
     return ParseResult_Ok;
 }
 
@@ -151,14 +141,6 @@ void
 free_cli_options_resources(CommandLineOptions options) {
     if (options.action_name) string_free(options.action_name);
     if (options.template_string) string_free(options.template_string);
-    StringList * node = options.config_files;
-    while (node) {
-        StringList * next = node->next;
-        if (node->string) string_free(node->string);
-        free(node);
-        node = next;
-    }
-    if (options.variables) {
-        template_free(options.variables);
-    }
+    string_list_free(options.config_files);
+    template_free(options.variables);
 }
