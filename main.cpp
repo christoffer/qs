@@ -11,7 +11,7 @@
 #include "configs.h"
 #include "help_text.h"
 
-#define QUICK_SCRIPT_VERSION "1.0.0"
+#define QUICK_SCRIPT_VERSION "1.1.0"
 
 static void
 print_version() {
