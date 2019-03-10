@@ -1,4 +1,5 @@
-```
+-e ```
+
 qs (quick-scripts): A tiny utility for keeping a catalogue of one-liners.
 
 Usage:
@@ -53,26 +54,26 @@ Configration files:
   Comments are allowed using '#' at the start of the line.
   Whitespace and emtpy lines are ignored.
 
-  Template strings or argument values is anything (except the leading whitespace) following the = or :=
-  to the end of the line (except the leading whitespace after the := or =)
+  Template strings or argument values is anything (except the leading whitespace) following
+  the = or := to the end of the line.
 
-  Valid action-, or argument names follow the format [a-z][a-zA-Z0-9_-]+ (e.g. 'fooBar', 'thing1', 'my_arg', 'my-arg-1').
+  Valid action-, or argument names follow the format [a-z][a-zA-Z0-9_-]+
+  (e.g.  'fooBar', 'thing1', 'my_arg', 'my-arg-1').
 
 Templates:
   Templates can expand positional arguments using ${0}, ${1}, (etc) placeholders.
   Named arguments can be expanded using ${foobar}
 
-  For example, calling 'qs foo bar --baz qux' will use the following substituions in the template:
+  For example, calling 'qs foo --baz qux' will use the following substituions in the template:
     ${0} => 'foo'
-    ${1} => 'bar'
     ${baz} => 'qux'
 
   Templates allow for conditional sections using `${arg?}`, `${else}` (optional), and `${end}`.
 
   For example:
-    qs --name 'Christoffer' --template '${name?}echo \Hi ${name}!\${else}echo \Anyone there?\${end}'
+    qs --name 'Christoffer' --template '${name?}echo "Hi ${name}!"${else}echo "Anyone there?"${end}'
     #=> 'Hi Christoffer!'
-    qs --template '${name?}echo \Hi ${name}!\${else}echo \Anyone there?\${end}'
+    qs --template '${name?}echo "Hi ${name}!"${else}echo "Anyone there?"${end}'
     #=> 'Anyone there?'
 
   Nested conditional blocks are allowed.
