@@ -46,7 +46,7 @@ print_available_actions(StringList * config_filepaths) {
                 bool shadowed = string_list_contains(seen, action_name);
                 if (!shadowed) {
                     fprintf(stdout, " - %-35s (%s)\n", action_name, config_path);
-                    seen = string_push_dup_front(seen, action_name);
+                    seen = string_list_add_front_dup(seen, action_name);
                 }
                 action_name_item = action_name_item->next;
             }

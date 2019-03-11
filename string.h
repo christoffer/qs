@@ -36,7 +36,7 @@ String string_append(String string, const char chr);
 String string_copy(String string, const char * content, u32 count);
 String string_copy(String string, const char * content);
 
-StringList * string_push_dup_front(StringList * list, const char *);
+StringList * string_list_add_front_dup(StringList * list, const char *);
 bool string_list_contains(StringList * list, const char *);
 void string_list_free(StringList * list);
 
@@ -46,4 +46,3 @@ bool string_starts_with(const char * string, const char * substring);
 u32 cstrlen(const char * cstr);
 void cstrcpy(char * dest, const char * src);
 void cstrcat(char * dest, const char * src);
-

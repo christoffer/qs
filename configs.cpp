@@ -210,9 +210,7 @@ read_until_newline(u32 start, String content, String * value)
 
 static ActionTemplatePair *
 remove_duplicate_actions(ActionTemplatePair * pairs, const char * filepath) {
-    ActionTemplatePair * head = pairs;
-    ActionTemplatePair * node = head;
-    ActionTemplatePair * prev = 0;
+    ActionTemplatePair * head = pairs, * node = head, * prev = 0;
     StringList * seen_actions = 0;
     while (node) {
         if (string_list_contains(seen_actions, node->action_name)) {
@@ -230,7 +228,7 @@ remove_duplicate_actions(ActionTemplatePair * pairs, const char * filepath) {
             string_free(dead->template_string);
             free(dead);
         } else {
-            seen_actions = string_push_dup_front(seen_actions, node->action_name);
+            seen_actions = string_list_add_front_dup(seen_actions, node->action_name);
             prev = node;
             node = node->next;
         }
@@ -417,7 +415,7 @@ config_get_action_names(char * config_file_path, StringList ** action_names) {
     if (parse_config(config_file_path, &pairs, &vars)) {
         ActionTemplatePair * pair = pairs;
         while (pair) {
-            found_action_names = string_push_dup_front(found_action_names, pair->action_name);
+            found_action_names = string_list_add_front_dup(found_action_names, pair->action_name);
             pair = pair->next;
         }
         _free_pairs(pairs);

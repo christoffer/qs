@@ -360,7 +360,7 @@ template_generate_usage(String template_string, const char * action_name) {
                     named_arg_desc = string_append(named_arg_desc, " [--");
                     named_arg_desc = string_append(named_arg_desc, tok->value);
                     named_arg_desc = string_append(named_arg_desc, " <value>]");
-                    seen_names = string_push_dup_front(seen_names, tok->value);
+                    seen_names = string_list_add_front_dup(seen_names, tok->value);
                     has_named_vars = true;
                 }
             }

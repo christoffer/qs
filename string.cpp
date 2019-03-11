@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <assert.h>
+#include <stdarg.h>
 
 #include "base.h"
 #include "string.h"
@@ -7,6 +8,10 @@
 // Header size in bytes (4 for bufsize, 4 for string length)
 #define HEADER_SIZE 8
 #define NUL_SIZE 1
+
+// How many bytes to overgrow the buffer with when it needs to expand.
+// The current value choosen completely arbitrarily.
+#define BUFFER_OVERGROW 64
 
 // NOTE(christoffer) See note about casting to void * in string.h
 #define _get_bufsize(str) (*((u32*)((void *)(str - HEADER_SIZE))))
@@ -114,7 +119,7 @@ string_ensure_fits_len(String string, u32 at_least_length) {
     u32 curlen = string_len(string);
     if (curlen < at_least_length) {
         u32 req_bufsize = at_least_length + HEADER_SIZE + NUL_SIZE;
-        string = string_resizebuf(string, req_bufsize);
+        string = string_resizebuf(string, req_bufsize + BUFFER_OVERGROW);
     }
     return string;
 }
@@ -167,7 +172,7 @@ string_copy(String string, const char * content) {
 }
 
 StringList *
-string_push_dup_front(StringList * list, const char * content) {
+string_list_add_front_dup(StringList * list, const char * content) {
     StringList * node = (StringList *) calloc(1, sizeof(StringList));
     node->string = string_new(content);
     node->next = list;

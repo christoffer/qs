@@ -59,7 +59,7 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
                 }
 
                 if (char * resolved_path = realpath(current_arg, 0)) {
-                    options->config_files = string_push_dup_front(options->config_files, resolved_path);
+                    options->config_files = string_list_add_front_dup(options->config_files, resolved_path);
                     free(resolved_path);
                 } else {
                     fprintf(stdout, "Warning: could not read the config file '%s'. Ignoring.\n", current_arg);
