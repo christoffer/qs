@@ -1,15 +1,16 @@
 #include <assert.h>
-#include <unistd.h>
-#include <sys/stat.h>
 #include <stdio.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "files.h"
 
 String
-read_entire_file(const char * filepath) {
+read_entire_file(const char* filepath)
+{
     assert(filepath);
 
-    FILE * fp;
+    FILE* fp;
     fp = fopen(filepath, "r");
     if (!fp) {
         fprintf(stderr, "Warning: Failed to open file %s\n", filepath);
@@ -36,8 +37,8 @@ read_entire_file(const char * filepath) {
     return result;
 }
 
-bool
-is_readable_regfile(const char * path) {
+bool is_readable_regfile(const char* path)
+{
     struct stat file_stat;
     // NOTE(christoffer) stat should follow symlinks, which we want
     bool is_regfile = (stat(path, &file_stat) == 0 && S_ISREG(file_stat.st_mode));
@@ -45,8 +46,8 @@ is_readable_regfile(const char * path) {
     return is_regfile && is_readable;
 }
 
-bool
-is_readable_dir(const char * path) {
+bool is_readable_dir(const char* path)
+{
     struct stat file_stat;
     bool is_dir = (stat(path, &file_stat) == 0 && S_ISDIR(file_stat.st_mode));
     bool is_readable = access(path, F_OK) != -1;

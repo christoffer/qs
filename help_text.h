@@ -2,9 +2,9 @@
 
 void print_help();
 
-void
-print_help() {
-	fprintf(stdout, R"help(
+void print_help()
+{
+    fprintf(stdout, R"help(
 
 qs (quick-scripts): A tiny utility for keeping a catalogue of one-liners.
 

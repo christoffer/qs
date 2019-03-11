@@ -1,25 +1,27 @@
 #include <assert.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "base.h"
-#include "files.h"
 #include "cli.h"
 #include "configs.h"
+#include "files.h"
 #include "help_text.h"
 
 #define QUICK_SCRIPT_VERSION "1.1.0"
 
 static void
-print_version() {
+print_version()
+{
     fprintf(stdout, "%s\n", QUICK_SCRIPT_VERSION);
 }
 
 static void
-print_usage(const char * exec_name) {
+print_usage(const char* exec_name)
+{
     printf("Usage:\n");
     printf("%s [options] <action name> [--help] [<action arguments>, ...]\n", exec_name);
     printf("%s [options] --template <template string> [<action arguments>, ...]\n", exec_name);
@@ -28,19 +30,20 @@ print_usage(const char * exec_name) {
 }
 
 static void
-print_available_actions(StringList * config_filepaths) {
-    StringList * config_path_item = config_filepaths;
-    StringList * seen = 0;
+print_available_actions(StringList* config_filepaths)
+{
+    StringList* config_path_item = config_filepaths;
+    StringList* seen = 0;
     bool did_print_header = false;
-    while(config_path_item) {
+    while (config_path_item) {
         String config_path = config_path_item->string;
-        StringList * action_names = 0;
+        StringList* action_names = 0;
         if (config_get_action_names(config_path, &action_names)) {
             if (!did_print_header) {
                 fprintf(stdout, "Available actions:\n");
                 did_print_header = true;
             }
-            StringList * action_name_item = action_names;
+            StringList* action_name_item = action_names;
             while (action_name_item) {
                 String action_name = action_name_item->string;
                 bool shadowed = string_list_contains(seen, action_name);
@@ -62,9 +65,11 @@ print_available_actions(StringList * config_filepaths) {
  * If there are no '/' characters in the provided filepath, a '.' character is returned.
  * The trailing '/' is not included after calling this function.
  */
-static void dirname(String filepath) {
+static void dirname(String filepath)
+{
     u32 offset = string_len(filepath);
-    while (offset && filepath[offset] != '/') offset--;
+    while (offset && filepath[offset] != '/')
+        offset--;
     if (!offset) {
         filepath[0] = '.';
         filepath[1] = '\0';
@@ -74,13 +79,13 @@ static void dirname(String filepath) {
 }
 
 static void
-exec_with_options(CommandLineOptions options, String shell_command, char * cwd)
+exec_with_options(CommandLineOptions options, String shell_command, char* cwd)
 {
     String cmd = string_new("cd ");
     cmd = string_append(cmd, cwd ? cwd : ".");
     cmd = string_append(cmd, "; QS_RUN_DIR=");
 
-    char rundir[PATH_MAX] = {0};
+    char rundir[PATH_MAX] = { 0 };
     if (realpath(".", rundir)) {
         cmd = string_append(cmd, rundir);
     } else {
@@ -104,23 +109,24 @@ exec_with_options(CommandLineOptions options, String shell_command, char * cwd)
 }
 
 static void
-populate_options_with_default_config_files(CommandLineOptions * options) {
-    StringList * default_config_files = resolve_default_config_files();
+populate_options_with_default_config_files(CommandLineOptions* options)
+{
+    StringList* default_config_files = resolve_default_config_files();
 
     if (options->config_files) {
         // Add the default configs files after the user provided ones
-        StringList * end = options->config_files;
-        while (end && end->next) end = end->next;
+        StringList* end = options->config_files;
+        while (end && end->next)
+            end = end->next;
         end->next = default_config_files;
     } else {
         // Set the config files to just the default ones
         options->config_files = default_config_files;
     }
 
-    if (options->verbose && options->config_files)
-    {
+    if (options->verbose && options->config_files) {
         fprintf(stdout, "Searching the following configuration files:\n");
-        StringList * node = options->config_files;
+        StringList* node = options->config_files;
         while (node) {
             fprintf(stdout, " - %s\n", node->string);
             node = node->next;
@@ -135,7 +141,8 @@ enum ErrorType {
 };
 
 static ErrorType
-process_options(CommandLineOptions * options, const char * program_name) {
+process_options(CommandLineOptions* options, const char* program_name)
+{
     // Handle no argument invokation
     if (options->no_arguments_given) {
         print_usage(program_name);
@@ -190,13 +197,13 @@ process_options(CommandLineOptions * options, const char * program_name) {
 
         // Search through the configuration files for an action with the given name in order to find
         // the template.
-        char * action_name = options->action_name;
-        char * config_path = 0;
+        char* action_name = options->action_name;
+        char* config_path = 0;
 
         // Loop through the configuration files and look for the first declaration of the
         // sought action.
         ResolvedTemplateResult template_res;
-        StringList * config_file = options->config_files;
+        StringList* config_file = options->config_files;
         while (config_file) {
             config_path = config_file->string;
             template_res = resolve_template_for_action(config_path, action_name);
@@ -215,8 +222,8 @@ process_options(CommandLineOptions * options, const char * program_name) {
                 fprintf(stdout, "Resolved template: %s\nFrom: %s\n", template_res.template_string, config_path ? config_path : "--template");
                 if (template_res.vars) {
                     fprintf(stdout, "with predefined variable values:\n");
-                    VarList * vars = template_res.vars;
-                    while(vars) {
+                    VarList* vars = template_res.vars;
+                    while (vars) {
                         fprintf(stdout, " - ${%s} => %s\n", vars->name, vars->value);
                         vars = vars->next;
                     }
@@ -241,7 +248,7 @@ process_options(CommandLineOptions * options, const char * program_name) {
                     dirname(config_path);
 
                 // Merge the user defined variables into the config file provided variables
-                VarList * merged_vars = template_merge(template_res.vars, options->variables);
+                VarList* merged_vars = template_merge(template_res.vars, options->variables);
                 String command = template_render(template_res.template_string, merged_vars);
                 template_free(merged_vars);
                 if (command) {
@@ -268,23 +275,21 @@ process_options(CommandLineOptions * options, const char * program_name) {
     assert(false); // All possible combinations should have been exhausted at this point
 }
 
-int
-main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     // parse command line arguments
     CommandLineOptions options = {};
 
     ParseResult parse_result = parse_cli_args(&options, argc, argv);
-    switch(parse_result)
-    {
-        case ParseResult_Error:
-            free_cli_options_resources(options);
-            exit(ErrorType_Error);
-        case ParseResult_Invalid:
-            free_cli_options_resources(options);
-            exit(ErrorType_User);
-        case ParseResult_Ok:
-            /* fallthrough */;
+    switch (parse_result) {
+    case ParseResult_Error:
+        free_cli_options_resources(options);
+        exit(ErrorType_Error);
+    case ParseResult_Invalid:
+        free_cli_options_resources(options);
+        exit(ErrorType_User);
+    case ParseResult_Ok:
+        /* fallthrough */;
     }
 
     ErrorType error = process_options(&options, argv[0]);

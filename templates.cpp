@@ -1,6 +1,6 @@
 #include <assert.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "templates.h"
 
@@ -18,13 +18,14 @@ struct LinkedToken {
     String value;
     u32 start;
     u32 end;
-    LinkedToken * next;
+    LinkedToken* next;
 };
 
 inline static void
-linked_token_free(LinkedToken * token) {
-    while(token) {
-        LinkedToken * dead = token;
+linked_token_free(LinkedToken* token)
+{
+    while (token) {
+        LinkedToken* dead = token;
         token = token->next;
         if (dead->value) {
             string_free(dead->value);
@@ -34,7 +35,8 @@ linked_token_free(LinkedToken * token) {
 }
 
 static void
-print_error(const char * message, u32 start, u32 end, String template_string) {
+print_error(const char* message, u32 start, u32 end, String template_string)
+{
     // Print a message like:
     //
     // Error: error message here
@@ -43,13 +45,16 @@ print_error(const char * message, u32 start, u32 end, String template_string) {
     //
     fprintf(stdout, "Error: %s.\n%s\n", message, template_string);
     u32 i = 0;
-    while (i++ < start) printf(" ");
-    while (i++ <= end) printf("^");
+    while (i++ < start)
+        printf(" ");
+    while (i++ <= end)
+        printf("^");
 }
 
 static void
-add_token_and_reset(TokenType type, String value, u32 offset, LinkedToken ** head, LinkedToken ** end) {
-    LinkedToken * new_token = (LinkedToken *) calloc(1, sizeof(LinkedToken));
+add_token_and_reset(TokenType type, String value, u32 offset, LinkedToken** head, LinkedToken** end)
+{
+    LinkedToken* new_token = (LinkedToken*)calloc(1, sizeof(LinkedToken));
     new_token->type = type;
 
     // We expect this function to be called once the entire token has been scanned,
@@ -59,18 +64,21 @@ add_token_and_reset(TokenType type, String value, u32 offset, LinkedToken ** hea
     new_token->value = string_new(value);
 
     // Set the first token in the list if it's not already set
-    if (!*head) *head = new_token;
+    if (!*head)
+        *head = new_token;
 
     // If we have an end token set, link it with the new current before making
     // the new token the new end.
-    if (*end) (*end)->next = new_token;
+    if (*end)
+        (*end)->next = new_token;
     *end = new_token;
 
     string_clear(value);
 }
 
-static LinkedToken *
-tokenize_template(String template_string) {
+static LinkedToken*
+tokenize_template(String template_string)
+{
     enum TokenizerMode {
         Literal,
         VarBlock,
@@ -89,8 +97,8 @@ tokenize_template(String template_string) {
     String curlit = string_new();
 
     u32 offset = 0;
-    LinkedToken * tokens = 0;
-    LinkedToken * end = 0;
+    LinkedToken* tokens = 0;
+    LinkedToken* end = 0;
 
     while (offset < string_len(template_string) && !error) {
         if (skip_next_whitespace) {
@@ -103,75 +111,75 @@ tokenize_template(String template_string) {
         char c = template_string[offset];
 
         switch (mode) {
-            case Literal:
-                if (c == '$') {
-                    if (escape_mode) {
-                        escape_mode = false;
-                        curlit = string_append(curlit, "$");
-                    } else {
-                        escape_mode = true;
-                    }
-                } else if (c == '{') {
-                    if (escape_mode) {
-                        if (string_len(curlit)) {
-                            add_token_and_reset(TT_Str, curlit, offset, &tokens, &end);
-                        }
-                        mode = VarBlock;
-                        skip_next_whitespace = true;
-                    } else {
-                        curlit = string_append(curlit, c);
-                    }
+        case Literal:
+            if (c == '$') {
+                if (escape_mode) {
                     escape_mode = false;
+                    curlit = string_append(curlit, "$");
                 } else {
-                    if (escape_mode) {
-                        print_error("Unexpected character (use $$ to output a literal $)", offset, offset + 1, template_string);
-                        error = true;
-                        break;
-                    } else {
-                        curlit = string_append(curlit, c);
-                    }
+                    escape_mode = true;
                 }
-            break;
-
-            case VarBlock:
-                if (c == '}') {
+            } else if (c == '{') {
+                if (escape_mode) {
                     if (string_len(curlit)) {
-                        TokenType type = TT_Var;
-                        if (string_eq(curlit, "else")) {
-                            type = TT_Else;
-                        } else if (string_eq(curlit, "end")) {
-                            type = TT_End;
-                        }
-                        add_token_and_reset(type, curlit, offset, &tokens, &end);
+                        add_token_and_reset(TT_Str, curlit, offset, &tokens, &end);
                     }
-                    seen_variable = false;
-                    mode = Literal;
-                } else if (is_identifier_char(c)) {
-                    if (seen_variable) {
-                        print_error("Only a single variable allowed per block", offset, offset + 1, template_string);
-                        error = true;
-                        break;
-                    }
-                    curlit = string_append(curlit, c);
-                } else if (c == '?') {
-                    if (string_len(curlit) > 0) {
-                        add_token_and_reset(TT_If, curlit, offset, &tokens, &end);
-                        skip_next_whitespace = true;
-                    } else {
-                        print_error("Missing variable", offset, offset + 1, template_string);
-                        error = true;
-                        break;
-                    }
-                    seen_variable = true;
-                } else if (c == ' ') {
-                    add_token_and_reset(TT_Var, curlit, offset, &tokens, &end);
-                    seen_variable = true;
+                    mode = VarBlock;
                     skip_next_whitespace = true;
                 } else {
-                    print_error("Unexpected character", offset, offset + 1, template_string);
+                    curlit = string_append(curlit, c);
+                }
+                escape_mode = false;
+            } else {
+                if (escape_mode) {
+                    print_error("Unexpected character (use $$ to output a literal $)", offset, offset + 1, template_string);
+                    error = true;
+                    break;
+                } else {
+                    curlit = string_append(curlit, c);
+                }
+            }
+            break;
+
+        case VarBlock:
+            if (c == '}') {
+                if (string_len(curlit)) {
+                    TokenType type = TT_Var;
+                    if (string_eq(curlit, "else")) {
+                        type = TT_Else;
+                    } else if (string_eq(curlit, "end")) {
+                        type = TT_End;
+                    }
+                    add_token_and_reset(type, curlit, offset, &tokens, &end);
+                }
+                seen_variable = false;
+                mode = Literal;
+            } else if (is_identifier_char(c)) {
+                if (seen_variable) {
+                    print_error("Only a single variable allowed per block", offset, offset + 1, template_string);
                     error = true;
                     break;
                 }
+                curlit = string_append(curlit, c);
+            } else if (c == '?') {
+                if (string_len(curlit) > 0) {
+                    add_token_and_reset(TT_If, curlit, offset, &tokens, &end);
+                    skip_next_whitespace = true;
+                } else {
+                    print_error("Missing variable", offset, offset + 1, template_string);
+                    error = true;
+                    break;
+                }
+                seen_variable = true;
+            } else if (c == ' ') {
+                add_token_and_reset(TT_Var, curlit, offset, &tokens, &end);
+                seen_variable = true;
+                skip_next_whitespace = true;
+            } else {
+                print_error("Unexpected character", offset, offset + 1, template_string);
+                error = true;
+                break;
+            }
             break;
         }
 
@@ -180,7 +188,7 @@ tokenize_template(String template_string) {
 
     if (mode == Literal) {
         add_token_and_reset(TT_Str, curlit, offset, &tokens, &end);
-    } else if(!error) {
+    } else if (!error) {
         print_error("Unfinished variable block", string_len(template_string) - 1, string_len(template_string), template_string);
         error = true;
     }
@@ -196,20 +204,21 @@ tokenize_template(String template_string) {
 }
 
 static String
-get_truthy_value(VarList * vars, const char * name) {
+get_truthy_value(VarList* vars, const char* name)
+{
     String value = template_get(vars, name);
     return value && !string_eq(value, "") ? value : 0;
 }
 
 static bool
 _process_conditional(
-        LinkedToken ** tokens,
-        VarList * vars,
-        String template_string,
-        bool skip_all,
-        String * result_out
-) {
-    LinkedToken * token = (*tokens);
+    LinkedToken** tokens,
+    VarList* vars,
+    String template_string,
+    bool skip_all,
+    String* result_out)
+{
+    LinkedToken* token = (*tokens);
 
     bool error = false;
     bool seen_else = false;
@@ -265,10 +274,11 @@ _process_conditional(
     return !error;
 }
 
-VarList *
-template_set(VarList * head, const char * varname, const char * varvalue) {
-    VarList * node = head;
-    VarList * end = 0;
+VarList*
+template_set(VarList* head, const char* varname, const char* varvalue)
+{
+    VarList* node = head;
+    VarList* end = 0;
 
     while (node && !string_eq(node->name, varname)) {
         end = node;
@@ -280,7 +290,7 @@ template_set(VarList * head, const char * varname, const char * varvalue) {
         node->value = string_copy(node->value, varvalue);
     } else {
         // No existing node found, create a new one and append it to the end
-        node = (VarList *) calloc(1, sizeof(VarList));
+        node = (VarList*)calloc(1, sizeof(VarList));
         node->name = string_new(varname);
         node->value = string_new(varvalue);
         if (end) {
@@ -291,10 +301,11 @@ template_set(VarList * head, const char * varname, const char * varvalue) {
     return head ? head : node;
 }
 
-VarList *
-template_merge(VarList * base, VarList * extended) {
-    VarList * result = 0;
-    VarList * varptr = base;
+VarList*
+template_merge(VarList* base, VarList* extended)
+{
+    VarList* result = 0;
+    VarList* varptr = base;
     while (varptr) {
         result = template_set(result, varptr->name, varptr->value);
         varptr = varptr->next;
@@ -308,19 +319,20 @@ template_merge(VarList * base, VarList * extended) {
     return result;
 }
 
-void
-template_free(VarList * node) {
+void template_free(VarList* node)
+{
     while (node) {
         string_free(node->name);
         string_free(node->value);
-        VarList * dead = node;
+        VarList* dead = node;
         node = node->next;
         free(dead);
     }
 }
 
 String
-template_get(VarList * node, const char * name) {
+template_get(VarList* node, const char* name)
+{
     while (node) {
         if (string_eq(node->name, name)) {
             return node->value;
@@ -331,20 +343,21 @@ template_get(VarList * node, const char * name) {
 }
 
 String
-template_generate_usage(String template_string, const char * action_name) {
-    LinkedToken * tokens = tokenize_template(template_string);
+template_generate_usage(String template_string, const char* action_name)
+{
+    LinkedToken* tokens = tokenize_template(template_string);
     if (!tokens) {
         return 0;
     }
 
-    u8 seen_pos[10] = {0};
+    u8 seen_pos[10] = { 0 };
     bool has_pos_args = false;
 
     String named_arg_desc = string_new();
-    StringList * seen_names = 0;
+    StringList* seen_names = 0;
     bool has_named_vars = false;
 
-    LinkedToken * tok = tokens;
+    LinkedToken* tok = tokens;
     while (tok) {
         if ((tok->type == TT_If) || (tok->type == TT_Var)) {
             if (string_len(tok->value) == 1 && (is_digit(*tok->value))) {
@@ -393,8 +406,9 @@ template_generate_usage(String template_string, const char * action_name) {
 }
 
 String
-template_render(String template_string, VarList * vars) {
-    LinkedToken * tokens = tokenize_template(template_string);
+template_render(String template_string, VarList* vars)
+{
+    LinkedToken* tokens = tokenize_template(template_string);
 
     if (!tokens) {
         // Failed to tokenize the template string
@@ -403,11 +417,11 @@ template_render(String template_string, VarList * vars) {
 
     String result = string_new();
     bool error = false;
-    LinkedToken * curtok = tokens;
+    LinkedToken* curtok = tokens;
     while (curtok) {
         // printf("Token main loop: %d [%s]\n", curtok->type, curtok->value);
         if (curtok->type == TT_If) {
-            if(!_process_conditional(&curtok, vars, template_string, false, &result)) {
+            if (!_process_conditional(&curtok, vars, template_string, false, &result)) {
                 error = true;
                 break;
             }

@@ -25,7 +25,7 @@ struct Token {
 
 struct ResolvedTemplateResult {
     String template_string = 0;
-    VarList * vars = 0;
+    VarList* vars = 0;
     bool parse_error = false;
 };
 
@@ -37,14 +37,14 @@ struct ResolvedTemplateResult {
  * first is added fist to the list. It's assumed that the list already contains configuration files
  * with higher priority than any one added by this function.
  */
-StringList * resolve_default_config_files();
+StringList* resolve_default_config_files();
 
 /**
  * Parses the config file and writes all action names to 'action_names'.
  * Returns true if the config file was successfully parsed, false otherwise (no result
  * will be written in this case).
  */
-bool config_get_action_names(char * config_file_path, StringList ** action_names);
+bool config_get_action_names(char* config_file_path, StringList** action_names);
 
 /**
  * Resolves a template string for given action by parsing a list of config
@@ -54,4 +54,4 @@ bool config_get_action_names(char * config_file_path, StringList ** action_names
  * Returns a ResolveTemplateRes enum value which indicates the resolution (found, not found or error).
  * The resolved template string is written to 'resolved_template' only if the return value is found.
  */
-ResolvedTemplateResult resolve_template_for_action(char * config_file_path, char * action_name);
+ResolvedTemplateResult resolve_template_for_action(char* config_file_path, char* action_name);

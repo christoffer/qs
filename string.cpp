@@ -1,5 +1,5 @@
-#include <stdlib.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #include "string.h"
 
@@ -12,8 +12,8 @@
 #define BUFFER_OVERGROW 64
 
 // NOTE(christoffer) See note about casting to void * in string.h
-#define _get_bufsize(str) (*((u32*)((void *)(str - HEADER_SIZE))))
-#define _set_bufsize(str, bufsize) (*((u32 *)(void *)((str - HEADER_SIZE))) = bufsize)
+#define _get_bufsize(str) (*((u32*)((void*)(str - HEADER_SIZE))))
+#define _set_bufsize(str, bufsize) (*((u32*)(void*)((str - HEADER_SIZE))) = bufsize)
 
 /**
  * A String implementation where the buffer size and the string length are prepended to the
@@ -26,29 +26,34 @@
  *                                                     ^  pointer returned to caller
  */
 
-u32
-cstrlen(const char * cstr) {
+u32 cstrlen(const char* cstr)
+{
     u32 nul_offset = 0;
-    while (*(cstr + nul_offset++));
+    while (*(cstr + nul_offset++))
+        ;
     return nul_offset - 1;
 }
 
-void
-cstrcpy(char * dest, const char * src) {
-    while((*(dest++) = *(src++)));
+void cstrcpy(char* dest, const char* src)
+{
+    while ((*(dest++) = *(src++)))
+        ;
 }
 
-void
-cstrcat(char * dest, const char * src) {
-    while(*(dest++));                // seek to %nul
-    dest--;                          // backtrack to overwrite the %nul
-    while((*(dest++) = *(src++)));   // copy until (including) src %nul
+void cstrcat(char* dest, const char* src)
+{
+    while (*(dest++))
+        ; // seek to %nul
+    dest--; // backtrack to overwrite the %nul
+    while ((*(dest++) = *(src++)))
+        ; // copy until (including) src %nul
 }
 
 String
-string_new() {
+string_new()
+{
     u32 bufsize = HEADER_SIZE + NUL_SIZE;
-    char * buf = (char *) calloc(1, bufsize);
+    char* buf = (char*)calloc(1, bufsize);
     assert(buf);
     String string = (String)(buf + HEADER_SIZE);
     _set_bufsize(string, bufsize);
@@ -57,10 +62,11 @@ string_new() {
 }
 
 String
-string_new(const char * content) {
+string_new(const char* content)
+{
     u32 content_len = cstrlen(content);
     u32 req_bufsize = HEADER_SIZE + content_len + NUL_SIZE;
-    char * buf = (char *) calloc(1, req_bufsize);
+    char* buf = (char*)calloc(1, req_bufsize);
     assert(buf);
 
     String string = (String)(buf + HEADER_SIZE);
@@ -72,23 +78,24 @@ string_new(const char * content) {
     return string;
 }
 
-void
-string_clear(String string) {
+void string_clear(String string)
+{
     set_string_len(string, 0);
     *string = '\0';
 }
 
-void
-string_free(String string) {
+void string_free(String string)
+{
     if (string) {
-        char * bufptr = ((char *) string) - HEADER_SIZE;
+        char* bufptr = ((char*)string) - HEADER_SIZE;
         free(bufptr);
     }
 }
 
 String
-string_resizebuf(String string, u32 new_bufsize) {
-    char * bufptr = string - HEADER_SIZE;
+string_resizebuf(String string, u32 new_bufsize)
+{
+    char* bufptr = string - HEADER_SIZE;
     u32 cur_bufsize = _get_bufsize(string);
 
     if (new_bufsize == cur_bufsize) {
@@ -97,7 +104,7 @@ string_resizebuf(String string, u32 new_bufsize) {
     }
 
     // Resize buffer and write the new buffer size
-    bufptr = (char *) realloc(bufptr, new_bufsize);
+    bufptr = (char*)realloc(bufptr, new_bufsize);
     assert(bufptr);
     string = bufptr + HEADER_SIZE;
     _set_bufsize(string, new_bufsize);
@@ -113,7 +120,8 @@ string_resizebuf(String string, u32 new_bufsize) {
 }
 
 String
-string_ensure_fits_len(String string, u32 at_least_length) {
+string_ensure_fits_len(String string, u32 at_least_length)
+{
     u32 curlen = string_len(string);
     if (curlen < at_least_length) {
         u32 req_bufsize = at_least_length + HEADER_SIZE + NUL_SIZE;
@@ -123,7 +131,8 @@ string_ensure_fits_len(String string, u32 at_least_length) {
 }
 
 String
-string_append(String string, const char * content) {
+string_append(String string, const char* content)
+{
     u32 cur_len = string_len(string);
     u32 new_len = cur_len + cstrlen(content);
     string = string_ensure_fits_len(string, new_len);
@@ -133,7 +142,8 @@ string_append(String string, const char * content) {
     return string;
 }
 String
-string_append(String string, const char chr) {
+string_append(String string, const char chr)
+{
     u32 cur_len = string_len(string);
     u32 new_len = cur_len + 1;
     string = string_ensure_fits_len(string, new_len);
@@ -145,13 +155,14 @@ string_append(String string, const char chr) {
 }
 
 String
-string_copy(String string, const char * content, u32 count) {
+string_copy(String string, const char* content, u32 count)
+{
     u32 content_len = cstrlen(content);
     u32 new_len = content_len < count ? content_len : count;
     string = string_ensure_fits_len(string, new_len);
 
     u32 copied_len = 0;
-    char * dest = string;
+    char* dest = string;
     while (*content && (copied_len < new_len)) {
         *(dest++) = *(content++);
         copied_len++;
@@ -163,23 +174,25 @@ string_copy(String string, const char * content, u32 count) {
 }
 
 String
-string_copy(String string, const char * content) {
+string_copy(String string, const char* content)
+{
     u32 bytelimit = cstrlen(content);
     String result = string_copy(string, content, bytelimit);
     return result;
 }
 
-StringList *
-string_list_add_front_dup(StringList * list, const char * content) {
-    StringList * node = (StringList *) calloc(1, sizeof(StringList));
+StringList*
+string_list_add_front_dup(StringList* list, const char* content)
+{
+    StringList* node = (StringList*)calloc(1, sizeof(StringList));
     node->string = string_new(content);
     node->next = list;
     return node;
 }
 
-bool
-string_list_contains(StringList * list, const char * value) {
-    while(list) {
+bool string_list_contains(StringList* list, const char* value)
+{
+    while (list) {
         if (string_eq(list->string, value)) {
             return true;
         }
@@ -188,24 +201,24 @@ string_list_contains(StringList * list, const char * value) {
     return false;
 }
 
-void
-string_list_free(StringList * list) {
-    while(list) {
-        StringList * dead = list;
+void string_list_free(StringList* list)
+{
+    while (list) {
+        StringList* dead = list;
         list = list->next;
         string_free(dead->string);
         free(dead);
     }
 }
 
-bool
-string_eq(const char * a, const char * b) {
+bool string_eq(const char* a, const char* b)
+{
     // Break immidiately if we didn't get strings, or if the first char doesn't match
     if ((!a || !b) || (*a != *b)) {
         return false;
     }
     // Loop while both of the strings are equal, and both of them have a value.
-    while((*a && *b) && (*a == *b)) {
+    while ((*a && *b) && (*a == *b)) {
         a++;
         b++;
     }
@@ -213,8 +226,8 @@ string_eq(const char * a, const char * b) {
     return !(*a || *b);
 }
 
-bool
-string_starts_with(const char * string, const char * substring) {
+bool string_starts_with(const char* string, const char* substring)
+{
     if (!string || !substring) {
         return false;
     }
@@ -226,4 +239,3 @@ string_starts_with(const char * string, const char * substring) {
     } while (*(++substring) && *(++string));
     return true;
 }
-

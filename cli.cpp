@@ -1,7 +1,7 @@
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 
 #include "cli.h"
 
@@ -11,7 +11,8 @@
 #define MAX_POS_ARGS 10
 
 static bool
-is_identifier(const char * val) {
+is_identifier(const char* val)
+{
     u32 i = cstrlen(val);
     while (i--) {
         if ((i == 0 && !is_alpha(val[i])) || (i > 0 && !is_identchr(val[i]))) {
@@ -22,9 +23,9 @@ is_identifier(const char * val) {
 }
 
 ParseResult
-parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
-    if (num_args < 1)
-    {
+parse_cli_args(CommandLineOptions* options, int num_args, char** args)
+{
+    if (num_args < 1) {
         return ParseResult_Invalid;
     } else if (num_args < 2) {
         // Need at least one argument
@@ -34,10 +35,8 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
 
     u8 num_pos_args = 0;
     int arg_index = 1; // Skip binary name
-    char * current_arg = args[arg_index];
-    while (arg_index < num_args)
-    {
-        // TODO(christoffer) Parse -d commands as arguments
+    char* current_arg = args[arg_index];
+    while (arg_index < num_args) {
         // Parse --arguments
         if (string_starts_with(current_arg, "--")) {
             /*** Parse option flags for qs itself ***/
@@ -55,7 +54,7 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
                     return ParseResult_Invalid;
                 }
 
-                if (char * resolved_path = realpath(current_arg, 0)) {
+                if (char* resolved_path = realpath(current_arg, 0)) {
                     options->config_files = string_list_add_front_dup(options->config_files, resolved_path);
                     free(resolved_path);
                 } else {
@@ -92,11 +91,11 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
                     options->template_string = string_new(current_arg);
                 }
             } else if (string_eq(current_arg, "--actions")) {
-                    options->print_available_actions = true;
+                options->print_available_actions = true;
             } else {
                 /*** Parse as named varible ***/
 
-                char * varname = (current_arg + 2); // skip '--'
+                char* varname = (current_arg + 2); // skip '--'
                 if (!is_identifier(varname)) {
                     fprintf(stdout, "Variable name '%s' is not a valid name. Variables must start with a letter, and consist only of letters, numbers and '-' and '_' (e.g. --some-variable_1, --NAME1).\n", varname);
                     return ParseResult_Invalid;
@@ -117,7 +116,7 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
                 fprintf(stdout, "At most %d positional arguments can be given. Wrap arguments containing spaces in double quotes (\").\n", MAX_POS_ARGS);
                 return ParseResult_Invalid;
             }
-            char varname[2] = {(char)('0' + num_pos_args++), 0};
+            char varname[2] = { (char)('0' + num_pos_args++), 0 };
             options->variables = template_set(options->variables, varname, args[arg_index]);
         } else {
             //
@@ -134,10 +133,12 @@ parse_cli_args(CommandLineOptions *options, int num_args, char ** args) {
     return ParseResult_Ok;
 }
 
-void
-free_cli_options_resources(CommandLineOptions options) {
-    if (options.action_name) string_free(options.action_name);
-    if (options.template_string) string_free(options.template_string);
+void free_cli_options_resources(CommandLineOptions options)
+{
+    if (options.action_name)
+        string_free(options.action_name);
+    if (options.template_string)
+        string_free(options.template_string);
     string_list_free(options.config_files);
     template_free(options.variables);
 }

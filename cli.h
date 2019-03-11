@@ -1,11 +1,10 @@
 #pragma once
 
 #include "base.h"
-#include "templates.h"
 #include "string.h"
+#include "templates.h"
 
-enum ParseResult
-{
+enum ParseResult {
     // Parsed OK, proceed with execution
     ParseResult_Ok,
     // User gave invalid arguments (reason printed during parsing)
@@ -29,7 +28,7 @@ struct CommandLineOptions {
      * The order is significant; the first String in this list is the last one
      * given by the user.
      */
-    StringList * config_files = 0;
+    StringList* config_files = 0;
 
     /** Flag for preventing actually running the rendered template, just print it. */
     bool dry_run = false;
@@ -53,12 +52,12 @@ struct CommandLineOptions {
     bool no_arguments_given = false;
 
     /** List of passed variables */
-    VarList * variables;
+    VarList* variables;
 };
 
-ParseResult parse_cli_args(CommandLineOptions * options, int num_args, char ** args);
+ParseResult parse_cli_args(CommandLineOptions* options, int num_args, char** args);
 
-void init_options(CommandLineOptions * options);
+void init_options(CommandLineOptions* options);
 
 /* Frees all resources claimed by the CommandLineOptions */
 void free_cli_options_resources(CommandLineOptions options);
