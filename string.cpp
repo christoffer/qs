@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <stdlib.h>
 
 #include "string.h"
 
@@ -53,7 +52,7 @@ String
 string_new()
 {
     u32 bufsize = HEADER_SIZE + NUL_SIZE;
-    char* buf = (char*)calloc(1, bufsize);
+    char* buf = ALLOC(char, bufsize);
     assert(buf);
     String string = (String)(buf + HEADER_SIZE);
     _set_bufsize(string, bufsize);
@@ -66,7 +65,7 @@ string_new(const char* content)
 {
     u32 content_len = cstrlen(content);
     u32 req_bufsize = HEADER_SIZE + content_len + NUL_SIZE;
-    char* buf = (char*)calloc(1, req_bufsize);
+    char* buf = ALLOC(char, req_bufsize);
     assert(buf);
 
     String string = (String)(buf + HEADER_SIZE);
@@ -184,7 +183,7 @@ string_copy(String string, const char* content)
 StringList*
 string_list_add_front_dup(StringList* list, const char* content)
 {
-    StringList* node = (StringList*)calloc(1, sizeof(StringList));
+    StringList* node = ALLOC(StringList, 1);
     node->string = string_new(content);
     node->next = list;
     return node;

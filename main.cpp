@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -167,22 +166,22 @@ process_options(CommandLineOptions* options, const char* program_name)
         return ErrorType_None;
     }
 
-    if (options->action_name && options->template_string) {
+    if (options->action_name && options->action_template) {
         fprintf(stdout, "Error: Must provide either an action name or a template string (--template), not both.\n");
         return ErrorType_User;
     }
 
-    if (!options->action_name && !options->template_string) {
+    if (!options->action_name && !options->action_template) {
         fprintf(stdout, "Error: Must provide either an action name or a --template\n\n");
         print_usage(program_name);
         return ErrorType_User;
     }
 
-    if (options->template_string) {
+    if (options->action_template) {
         if (options->verbose) {
-            fprintf(stdout, "Resolved template: %s\n", options->template_string);
+            fprintf(stdout, "Resolved template: %s\n", options->action_template);
         }
-        String command = template_render(options->template_string, options->variables);
+        String command = template_render(options->action_template, options->variables);
         if (command) {
             exec_with_options(*options, command, 0);
             string_free(command);
@@ -209,17 +208,17 @@ process_options(CommandLineOptions* options, const char* program_name)
             template_res = resolve_template_for_action(config_path, action_name);
             if (template_res.parse_error) {
                 return ErrorType_Error;
-            } else if (template_res.template_string) {
+            } else if (template_res.action_template) {
                 // Found the action template, stop looking
                 break;
             }
             config_file = config_file->next;
         }
 
-        if (template_res.template_string) {
+        if (template_res.action_template) {
             // Successfully resolved a valid template for the action
             if (options->verbose) {
-                fprintf(stdout, "Resolved template: %s\nFrom: %s\n", template_res.template_string, config_path ? config_path : "--template");
+                fprintf(stdout, "Resolved template: %s\nFrom: %s\n", template_res.action_template, config_path ? config_path : "--template");
                 if (template_res.vars) {
                     fprintf(stdout, "with predefined variable values:\n");
                     VarList* vars = template_res.vars;
@@ -232,13 +231,13 @@ process_options(CommandLineOptions* options, const char* program_name)
 
             ErrorType error;
             if (options->print_action_help) {
-                String usage = template_generate_usage(template_res.template_string, options->action_name);
+                String usage = template_generate_usage(template_res.action_template, options->action_name);
                 if (usage) {
                     fprintf(stdout, "%s", usage);
                     string_free(usage);
                     error = ErrorType_None;
                 } else {
-                    fprintf(stderr, "Invalid action template: %s\n", template_res.template_string);
+                    fprintf(stderr, "Invalid action template: %s\n", template_res.action_template);
                     error = ErrorType_Error;
                 }
             } else {
@@ -249,20 +248,20 @@ process_options(CommandLineOptions* options, const char* program_name)
 
                 // Merge the user defined variables into the config file provided variables
                 VarList* merged_vars = template_merge(template_res.vars, options->variables);
-                String command = template_render(template_res.template_string, merged_vars);
+                String command = template_render(template_res.action_template, merged_vars);
                 template_free(merged_vars);
                 if (command) {
                     exec_with_options(*options, command, config_path);
                     string_free(command);
                     error = ErrorType_None;
                 } else {
-                    fprintf(stderr, "Invalid action template: %s\n", template_res.template_string);
+                    fprintf(stderr, "Invalid action template: %s\n", template_res.action_template);
                     error = ErrorType_Error;
                 }
             }
 
             // Free the template result resources
-            string_free(template_res.template_string);
+            string_free(template_res.action_template);
             template_free(template_res.vars);
             return error;
         } else {

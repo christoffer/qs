@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "configs.h"
@@ -9,7 +8,7 @@
 
 struct ActionTemplatePair {
     String action_name = 0;
-    String template_string = 0;
+    String action_template = 0;
     ActionTemplatePair* next = 0;
 };
 
@@ -19,7 +18,7 @@ _free_pairs(ActionTemplatePair* head)
     ActionTemplatePair* pair = head;
     while (pair) {
         string_free(pair->action_name);
-        string_free(pair->template_string);
+        string_free(pair->action_template);
         ActionTemplatePair* dead = pair;
         pair = pair->next;
         free(dead);
@@ -74,11 +73,11 @@ find_source_root_dir(const char* start_path)
 /**
  * Allocates memory for a new node and it's content. Appends to the given end node (if set)
  * and returns the the new end (the new node)
- * */
+ */
 static StringList*
 push_back_dup(StringList** head, StringList* end, const char* content)
 {
-    StringList* node = (StringList*)calloc(1, sizeof(StringList));
+    StringList* node = ALLOC(StringList, 1);
     node->string = string_new(content);
     node->next = 0;
 
@@ -224,7 +223,7 @@ remove_duplicate_actions(ActionTemplatePair* pairs, const char* filepath)
             ActionTemplatePair* dead = node;
             node = node->next;
             string_free(dead->action_name);
-            string_free(dead->template_string);
+            string_free(dead->action_template);
             free(dead);
         } else {
             seen_actions = string_list_add_front_dup(seen_actions, node->action_name);
@@ -348,10 +347,10 @@ parse_config(const char* filepath, ActionTemplatePair** result_pairs, VarList** 
                     // Parsed a variable name at the start of the line, set the value
                     vars = template_set(vars, pending_var_name, value);
                 } else if (string_len(pending_action_name)) {
-                    ActionTemplatePair* node = (ActionTemplatePair*)calloc(1, sizeof(ActionTemplatePair));
+                    ActionTemplatePair* node = ALLOC(ActionTemplatePair, 1);
                     assert(node);
                     node->action_name = string_new(pending_action_name);
-                    node->template_string = string_new(value);
+                    node->action_template = string_new(value);
                     head = head ? head : node;
                     if (end)
                         end->next = node;
@@ -439,7 +438,7 @@ resolve_template_for_action(char* config_file_path, char* action_name)
         bool found = false;
         while (pair) {
             if (string_eq(pair->action_name, action_name)) {
-                result.template_string = string_new(pair->template_string);
+                result.action_template = string_new(pair->action_template);
                 result.vars = template_merge(0, vars);
                 found = true;
                 break;

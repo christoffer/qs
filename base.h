@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef int8_t s8;
 typedef int16_t s16;
@@ -13,3 +14,5 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 
 typedef int8_t b32;
+
+#define ALLOC(type, count) ((type*)calloc(count, sizeof(type)))

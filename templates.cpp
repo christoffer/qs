@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 #include "templates.h"
 
@@ -35,7 +34,7 @@ linked_token_free(LinkedToken* token)
 }
 
 static void
-print_error(const char* message, u32 start, u32 end, String template_string)
+print_error(const char* message, u32 start, u32 end, String action_template)
 {
     // Print a message like:
     //
@@ -43,7 +42,7 @@ print_error(const char* message, u32 start, u32 end, String template_string)
     // some template error somewhere
     //               ^^^^^
     //
-    fprintf(stdout, "Error: %s.\n%s\n", message, template_string);
+    fprintf(stdout, "Error: %s.\n%s\n", message, action_template);
     u32 i = 0;
     while (i++ < start)
         printf(" ");
@@ -54,8 +53,9 @@ print_error(const char* message, u32 start, u32 end, String template_string)
 static void
 add_token_and_reset(TokenType type, String value, u32 offset, LinkedToken** head, LinkedToken** end)
 {
-    LinkedToken* new_token = (LinkedToken*)calloc(1, sizeof(LinkedToken));
-    new_token->type = type;
+    LinkedToken* new_token = ALLOC(LinkedToken, 1);
+    new_token->type
+        = type;
 
     // We expect this function to be called once the entire token has been scanned,
     // and offset pointing to the first character of the next token.
@@ -77,7 +77,7 @@ add_token_and_reset(TokenType type, String value, u32 offset, LinkedToken** head
 }
 
 static LinkedToken*
-tokenize_template(String template_string)
+tokenize_template(String action_template)
 {
     enum TokenizerMode {
         Literal,
@@ -100,15 +100,15 @@ tokenize_template(String template_string)
     LinkedToken* tokens = 0;
     LinkedToken* end = 0;
 
-    while (offset < string_len(template_string) && !error) {
+    while (offset < string_len(action_template) && !error) {
         if (skip_next_whitespace) {
-            while (template_string[offset] == ' ') {
+            while (action_template[offset] == ' ') {
                 offset++;
             }
             skip_next_whitespace = false;
         }
 
-        char c = template_string[offset];
+        char c = action_template[offset];
 
         switch (mode) {
         case Literal:
@@ -132,7 +132,7 @@ tokenize_template(String template_string)
                 escape_mode = false;
             } else {
                 if (escape_mode) {
-                    print_error("Unexpected character (use $$ to output a literal $)", offset, offset + 1, template_string);
+                    print_error("Unexpected character (use $$ to output a literal $)", offset, offset + 1, action_template);
                     error = true;
                     break;
                 } else {
@@ -156,7 +156,7 @@ tokenize_template(String template_string)
                 mode = Literal;
             } else if (is_identifier_char(c)) {
                 if (seen_variable) {
-                    print_error("Only a single variable allowed per block", offset, offset + 1, template_string);
+                    print_error("Only a single variable allowed per block", offset, offset + 1, action_template);
                     error = true;
                     break;
                 }
@@ -166,7 +166,7 @@ tokenize_template(String template_string)
                     add_token_and_reset(TT_If, curlit, offset, &tokens, &end);
                     skip_next_whitespace = true;
                 } else {
-                    print_error("Missing variable", offset, offset + 1, template_string);
+                    print_error("Missing variable", offset, offset + 1, action_template);
                     error = true;
                     break;
                 }
@@ -176,7 +176,7 @@ tokenize_template(String template_string)
                 seen_variable = true;
                 skip_next_whitespace = true;
             } else {
-                print_error("Unexpected character", offset, offset + 1, template_string);
+                print_error("Unexpected character", offset, offset + 1, action_template);
                 error = true;
                 break;
             }
@@ -189,7 +189,7 @@ tokenize_template(String template_string)
     if (mode == Literal) {
         add_token_and_reset(TT_Str, curlit, offset, &tokens, &end);
     } else if (!error) {
-        print_error("Unfinished variable block", string_len(template_string) - 1, string_len(template_string), template_string);
+        print_error("Unfinished variable block", string_len(action_template) - 1, string_len(action_template), action_template);
         error = true;
     }
 
@@ -214,7 +214,7 @@ static bool
 _process_conditional(
     LinkedToken** tokens,
     VarList* vars,
-    String template_string,
+    String action_template,
     bool skip_all,
     String* result_out)
 {
@@ -242,13 +242,13 @@ _process_conditional(
                 *result_out = string_append(*result_out, value);
             }
         } else if (token->type == TT_If) {
-            if (!_process_conditional(&token, vars, template_string, skip_block, result_out)) {
+            if (!_process_conditional(&token, vars, action_template, skip_block, result_out)) {
                 error = true;
                 break;
             }
         } else if (token->type == TT_Else) {
             if (seen_else) {
-                print_error("Too many ${else} blocks", token->start, token->end, template_string);
+                print_error("Too many ${else} blocks", token->start, token->end, action_template);
                 error = true;
                 break;
             }
@@ -267,7 +267,7 @@ _process_conditional(
     // loop. Instead we detect it by exiting the loop without any other error,
     // but without ever seening an END block.
     if (!error && !seen_end) {
-        print_error("Missing ${end}", string_len(template_string) - 1, string_len(template_string), template_string);
+        print_error("Missing ${end}", string_len(action_template) - 1, string_len(action_template), action_template);
         return false;
     }
 
@@ -290,7 +290,7 @@ template_set(VarList* head, const char* varname, const char* varvalue)
         node->value = string_copy(node->value, varvalue);
     } else {
         // No existing node found, create a new one and append it to the end
-        node = (VarList*)calloc(1, sizeof(VarList));
+        node = ALLOC(VarList, 1);
         node->name = string_new(varname);
         node->value = string_new(varvalue);
         if (end) {
@@ -343,9 +343,9 @@ template_get(VarList* node, const char* name)
 }
 
 String
-template_generate_usage(String template_string, const char* action_name)
+template_generate_usage(String action_template, const char* action_name)
 {
-    LinkedToken* tokens = tokenize_template(template_string);
+    LinkedToken* tokens = tokenize_template(action_template);
     if (!tokens) {
         return 0;
     }
@@ -406,9 +406,9 @@ template_generate_usage(String template_string, const char* action_name)
 }
 
 String
-template_render(String template_string, VarList* vars)
+template_render(String action_template, VarList* vars)
 {
-    LinkedToken* tokens = tokenize_template(template_string);
+    LinkedToken* tokens = tokenize_template(action_template);
 
     if (!tokens) {
         // Failed to tokenize the template string
@@ -421,18 +421,18 @@ template_render(String template_string, VarList* vars)
     while (curtok) {
         // printf("Token main loop: %d [%s]\n", curtok->type, curtok->value);
         if (curtok->type == TT_If) {
-            if (!_process_conditional(&curtok, vars, template_string, false, &result)) {
+            if (!_process_conditional(&curtok, vars, action_template, false, &result)) {
                 error = true;
                 break;
             }
         } else if (curtok->type == TT_Str) {
             result = string_append(result, curtok->value);
         } else if (curtok->type == TT_Else) {
-            print_error("Unexpected ${else} block", curtok->start, curtok->end, template_string);
+            print_error("Unexpected ${else} block", curtok->start, curtok->end, action_template);
             error = true;
             break;
         } else if (curtok->type == TT_End) {
-            print_error("Unexpected ${end} block", curtok->start, curtok->end, template_string);
+            print_error("Unexpected ${end} block", curtok->start, curtok->end, action_template);
             error = true;
             break;
         } else if (curtok->type == TT_Var) {

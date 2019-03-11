@@ -15,43 +15,43 @@ enum ParseResult {
 
 /** The resulting configuration flags from parsing the CLI arguments given by the user. */
 struct CommandLineOptions {
-    /** The passed action name */
+    // The action name
     String action_name = 0;
 
-    /** The passed template string */
-    String template_string = 0;
+    // Ad-hoc action template string
+    String action_template = 0;
 
-    /**
-     * A list of config files given at the command line.
-     *
-     * Multiple config files can be given by specifying --config more than once.
-     * The order is significant; the first String in this list is the last one
-     * given by the user.
-     */
+    // List of configuration files given as arguments to the program.
+    // Multiple ones can be given. The list is ordered by configuration priority
+    // preference (most preferred is first in the list, least preferred is last).
     StringList* config_files = 0;
 
-    /** Flag for preventing actually running the rendered template, just print it. */
+    // Flags
+
+    // Prevent actually running the rendered template, just print it.
     bool dry_run = false;
 
-    /** Flag for printing verbose information during execution. */
+    // Print verbose information during execution.
     bool verbose = false;
 
-    /** Flag for printing the version. */
+    // Print the version.
     bool print_version = false;
 
-    /** Flag indicating that the user wishes to print the help string and exit. */
+    // Print the help string and exit
     bool print_help = false;
 
-    /** Flag for printing help for the given action_name */
+    // Print help for the given action_name
     bool print_action_help = false;
 
-    /** Flag for listing all available actions */
+    // List all available actions
     bool print_available_actions = false;
 
-    /** Flag for when no any arguments were passed. */
+    // No arguments passed
     bool no_arguments_given = false;
 
-    /** List of passed variables */
+    // List of variables passed on the command line.
+    // Positional arguments will be named "0", "1", etc. Named arguments will
+    // have the given name (minus the leading --).
     VarList* variables;
 };
 

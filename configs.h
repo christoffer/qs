@@ -24,7 +24,7 @@ struct Token {
 };
 
 struct ResolvedTemplateResult {
-    String template_string = 0;
+    String action_template = 0;
     VarList* vars = 0;
     bool parse_error = false;
 };
