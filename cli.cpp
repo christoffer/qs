@@ -3,10 +3,7 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include "base.h"
 #include "cli.h"
-#include "templates.h"
-#include "string.h"
 
 #define is_alpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
 #define is_identchr(c) (is_alpha(c) || (c >= '0' && c <= '9') || c == '-' || c == '_')

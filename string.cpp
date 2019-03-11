@@ -1,8 +1,6 @@
 #include <stdlib.h>
 #include <assert.h>
-#include <stdarg.h>
 
-#include "base.h"
 #include "string.h"
 
 // Header size in bytes (4 for bufsize, 4 for string length)

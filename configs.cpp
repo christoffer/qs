@@ -4,9 +4,7 @@
 #include <stdio.h>
 #include <limits.h>
 
-#include "base.h"
 #include "configs.h"
-#include "string.h"
 #include "files.h"
 
 struct ActionTemplatePair {

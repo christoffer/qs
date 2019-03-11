@@ -1,4 +1,5 @@
 #pragma once
+
 #include "base.h"
 
 #pragma clang diagnostic push

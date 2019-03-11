@@ -4,7 +4,6 @@
 #include <stdio.h>
 
 #include "files.h"
-#include "string.h"
 
 String
 read_entire_file(const char * filepath) {
